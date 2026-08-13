@@ -35,11 +35,15 @@ function dateSearch(query: string) {
 }
 
 function refreshLancamento(id?: string) {
-  revalidatePath('/');
-  revalidatePath('/lancamentos');
-  revalidatePath('/clientes');
-  revalidatePath('/colaboradores');
-  if (id) revalidatePath(`/lancamento/${id}`);
+  try {
+    revalidatePath('/');
+    revalidatePath('/lancamentos');
+    revalidatePath('/clientes');
+    revalidatePath('/colaboradores');
+    if (id) revalidatePath(`/lancamento/${id}`);
+  } catch {
+    // Ignora revalidatePath quando executado via CLI/script standalone
+  }
 }
 
 export async function searchLancamentos(query = '', tipo = 'RECEITA', page = 1) {
