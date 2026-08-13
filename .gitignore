@@ -1,0 +1,13 @@
+.agents/
+*.xlsx
+*.xls
+*.csv
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.env*
+app/prisma/backups/
+app/prisma/seed_data.json
+app/dev.db
+app/prisma/dev.db
