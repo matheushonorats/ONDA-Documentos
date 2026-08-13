@@ -135,7 +135,7 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
     throw new Error('O Google Drive ainda não está configurado para receber arquivos.');
   }
 
-  const uploaded: Array<{ driveId: string; webViewLink: string | null; typeId: string; file: File; name: string }> = [];
+  const uploaded: Array<{ driveId: string; webViewLink: string | null; typeId: string; typeName: string; file: File; name: string }> = [];
   try {
     for (let index = 0; index < metadata.length; index += 1) {
       const meta = metadata[index];
@@ -145,14 +145,18 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
       const type = await resolveType(meta);
       const response = await uploadToGoogleDrive(Buffer.from(await file.arrayBuffer()), file.name, file.type || 'application/octet-stream', folderId);
       if (!response.id) throw new Error(`O Drive não retornou a identificação de ${file.name}.`);
-      uploaded.push({ driveId: response.id, webViewLink: response.webViewLink ?? null, typeId: type.id, file, name: meta.nomeOriginal || file.name });
+      uploaded.push({ driveId: response.id, webViewLink: response.webViewLink ?? null, typeId: type.id, typeName: type.nome, file, name: meta.nomeOriginal || file.name });
     }
 
-    const idsToAttach = targetIds && targetIds.length > 0 ? targetIds : [lancamento.id];
-
     const documentsToCreate: Prisma.DocumentoCreateManyInput[] = [];
-    for (const targetId of idsToAttach) {
-      for (const item of uploaded) {
+    const mainTargetId = lancamento.id;
+
+    for (const item of uploaded) {
+      // Notas Fiscais, Boletos e Comprovantes pertencem APENAS a parcela individual em que foram anexados
+      const isSpecificDoc = /nota fiscal|\bnf\b|boleto|comprovante/i.test(item.typeName) || /nota fiscal|\bnf\b|boleto|comprovante/i.test(item.name);
+      const idsForThisDoc = !isSpecificDoc && targetIds && targetIds.length > 0 ? targetIds : [mainTargetId];
+
+      for (const targetId of idsForThisDoc) {
         documentsToCreate.push({
           lancamentoId: targetId,
           tipoDocumentoId: item.typeId,
@@ -169,8 +173,10 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
       data: documentsToCreate,
     });
 
+    const affectedIds = Array.from(new Set(documentsToCreate.map(d => d.lancamentoId)));
+
     await db.historicoLancamento.createMany({
-      data: idsToAttach.map(targetId => ({
+      data: affectedIds.map(targetId => ({
         lancamentoId: targetId,
         acao: 'INCLUSAO_DOCUMENTO',
         descricao: `${uploaded.length} novo(s) documento(s) adicionado(s): ${uploaded.map(u => u.name).join(', ')}.`,
@@ -464,6 +470,12 @@ export async function sincronizarDocumentosPI() {
       const allDocsMap = new Map<string, typeof group[0]['documentos'][0]>();
       for (const item of group) {
         for (const doc of item.documentos) {
+          // Apenas documentos gerais do PI (PI, Contrato, Autorização, Orçamento) são compartilhados.
+          // Notas Fiscais, Boletos e Comprovantes NUNCA são copiados entre parcelas.
+          const typeName = doc.tipoDocumento?.nome || '';
+          const isSpecificDoc = /nota fiscal|\bnf\b|boleto|comprovante/i.test(typeName) || /nota fiscal|\bnf\b|boleto|comprovante/i.test(doc.nomeOriginal);
+          if (isSpecificDoc) continue;
+
           const docKey = doc.caminhoOriginal || doc.urlPublica || doc.nomeOriginal;
           if (docKey && !allDocsMap.has(docKey)) {
             allDocsMap.set(docKey, doc);
