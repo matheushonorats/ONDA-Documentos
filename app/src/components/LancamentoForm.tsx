@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, FileText, Plus, X, ClipboardPaste } from 'lucide-react';
+import { Calendar, FileText, Plus, X, ClipboardPaste, Link as LinkIcon } from 'lucide-react';
 import { createLancamento } from '@/actions/lancamentos';
 
 type Props = {
@@ -58,6 +58,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const [buscaAgencia, setBuscaAgencia] = useState('');
 
   const [numeroNotaFiscal, setNumeroNotaFiscal] = useState('');
+  const [urlNotaFiscal, setUrlNotaFiscal] = useState('');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
   
@@ -171,6 +172,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       if (veiculoSelecionado) formData.append('veiculoId', veiculoSelecionado.id);
 
       if (numeroNotaFiscal) formData.append('numeroNotaFiscal', numeroNotaFiscal);
+      if (urlNotaFiscal) formData.append('urlNotaFiscal', urlNotaFiscal);
       if (descricao) formData.append('descricao', descricao);
       if (valor) formData.append('valor', valor);
       if (dataEmissao) formData.append('dataEmissao', dataEmissao);
@@ -439,8 +441,12 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700 flex items-center gap-1"><FileText className="w-4 h-4"/> Número da Nota Fiscal (NF)</label>
-            <input type="text" value={numeroNotaFiscal} onChange={(e) => setNumeroNotaFiscal(e.target.value)} placeholder="Ex: 1234 (Preenche auto se anexar o PDF)" className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+            <label className="block text-sm font-medium text-slate-700 flex items-center gap-1"><FileText className="w-4 h-4 text-slate-500"/> Número da Nota Fiscal (NF)</label>
+            <input type="text" value={numeroNotaFiscal} onChange={(e) => setNumeroNotaFiscal(e.target.value)} placeholder="Ex: 1234 (Preenche auto se anexar o PDF)" className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-slate-900" />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700 flex items-center gap-1"><LinkIcon className="w-4 h-4 text-indigo-600"/> Link / URL da Nota Fiscal Emitida (Opcional)</label>
+            <input type="text" value={urlNotaFiscal} onChange={(e) => setUrlNotaFiscal(e.target.value)} placeholder="Ex: https://nfe.prefeitura.sp.gov.br/publico/..." className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 text-sm" />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-700">{gerarParcelas ? 'Valor Total (R$) - Será dividido' : 'Valor Bruto (R$)'}</label>

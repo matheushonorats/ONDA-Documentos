@@ -313,6 +313,26 @@ export async function createLancamento(formData: FormData) {
       if (idsCriados.length > 0) {
         await saveDocuments({ id: idsCriados[0], tipoLancamento }, formData, idsCriados);
       }
+
+      const urlNf = String(formData.get('urlNotaFiscal') || '').trim();
+      if (urlNf && primeiroLancamentoId) {
+        const urlFormatada = urlNf.startsWith('http') ? urlNf : `https://${urlNf}`;
+        let tipoNfObj = await db.tipoDocumento.findFirst({ where: { nome: { contains: 'Nota Fiscal' } } });
+        if (!tipoNfObj) {
+          tipoNfObj = await db.tipoDocumento.create({ data: { nome: 'Nota Fiscal' } });
+        }
+        await db.documento.create({
+          data: {
+            lancamentoId: primeiroLancamentoId,
+            tipoDocumentoId: tipoNfObj.id,
+            nomeOriginal: nf ? `Link da NF ${nf}` : 'Link da Nota Fiscal Emitida',
+            urlPublica: urlFormatada,
+            caminhoOriginal: null,
+            tamanhoBytes: 0,
+            usuarioResponsavel: 'Inclusão pelo formulário',
+          },
+        });
+      }
       
       refreshLancamento(); // Revalida a tabela
       if (primeiroLancamentoId) refreshLancamento(primeiroLancamentoId);
