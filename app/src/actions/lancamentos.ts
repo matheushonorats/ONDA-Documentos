@@ -442,7 +442,7 @@ export async function deleteLancamento(id: string) {
 export async function sincronizarDocumentosPI() {
   try {
     const lancamentos = await db.lancamento.findMany({
-      include: { documentos: true },
+      include: { documentos: { include: { tipoDocumento: true } } },
     });
 
     const piGroups = new Map<string, typeof lancamentos>();
