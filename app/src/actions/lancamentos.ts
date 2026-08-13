@@ -120,7 +120,7 @@ async function resolveType(meta: UploadMeta) {
   return type;
 }
 
-async function saveDocuments(lancamento: { id: string; tipoLancamento: string }, formData: FormData) {
+async function saveDocuments(lancamento: { id: string; tipoLancamento: string }, formData: FormData, targetIds?: string[]) {
   const raw = formData.get('arquivosMeta');
   if (!raw) return 0;
   const metadata = JSON.parse(String(raw)) as UploadMeta[];
@@ -144,26 +144,34 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
       uploaded.push({ driveId: response.id, webViewLink: response.webViewLink ?? null, typeId: type.id, file, name: meta.nomeOriginal || file.name });
     }
 
-    await db.$transaction(uploaded.map((item) => db.documento.create({
-      data: {
-        lancamentoId: lancamento.id,
-        tipoDocumentoId: item.typeId,
-        nomeOriginal: item.name,
-        caminhoOriginal: item.driveId,
-        urlPublica: item.webViewLink,
-        tamanhoBytes: item.file.size,
-        usuarioResponsavel: 'Inclusão pelo sistema',
-      },
-    })));
+    const idsToAttach = targetIds && targetIds.length > 0 ? targetIds : [lancamento.id];
 
-    // Registrar histórico da adição de documentos
-    await db.historicoLancamento.create({
-      data: {
-        lancamentoId: lancamento.id,
+    const documentsToCreate: Prisma.DocumentoCreateManyInput[] = [];
+    for (const targetId of idsToAttach) {
+      for (const item of uploaded) {
+        documentsToCreate.push({
+          lancamentoId: targetId,
+          tipoDocumentoId: item.typeId,
+          nomeOriginal: item.name,
+          caminhoOriginal: item.driveId,
+          urlPublica: item.webViewLink,
+          tamanhoBytes: item.file.size,
+          usuarioResponsavel: 'Inclusão pelo sistema',
+        });
+      }
+    }
+
+    await db.documento.createMany({
+      data: documentsToCreate,
+    });
+
+    await db.historicoLancamento.createMany({
+      data: idsToAttach.map(targetId => ({
+        lancamentoId: targetId,
         acao: 'INCLUSAO_DOCUMENTO',
         descricao: `${uploaded.length} novo(s) documento(s) adicionado(s): ${uploaded.map(u => u.name).join(', ')}.`,
         usuario: 'Usuário',
-      },
+      })),
     });
 
     return uploaded.length;
@@ -279,18 +287,21 @@ export async function createLancamento(formData: FormData) {
               usuario: 'Usuário',
             },
           });
-          // Salva os documentos anexados apenas na 1ª parcela
-          await saveDocuments(lancamento, formData);
         } else {
           await db.historicoLancamento.create({
             data: {
               lancamentoId: lancamento.id,
               acao: 'CRIACAO',
-              descricao: `Lançamento criado via parcelamento (Parcela ${i + 1} de ${qtdParcelas}). Documentos associados podem estar na 1ª parcela.`,
+              descricao: `Lançamento criado via parcelamento (Parcela ${i + 1} de ${qtdParcelas}).`,
               usuario: 'Usuário',
             },
           });
         }
+      }
+
+      // Salva os documentos anexados em TODAS as parcelas geradas
+      if (idsCriados.length > 0) {
+        await saveDocuments({ id: idsCriados[0], tipoLancamento }, formData, idsCriados);
       }
       
       refreshLancamento(); // Revalida a tabela
@@ -417,4 +428,81 @@ export async function deleteLancamento(id: string) {
     return { success: false, error: 'Não foi possível excluir o lançamento.' };
   }
 }
+
+export async function sincronizarDocumentosPI() {
+  try {
+    const lancamentos = await db.lancamento.findMany({
+      include: { documentos: true },
+    });
+
+    const piGroups = new Map<string, typeof lancamentos>();
+
+    for (const l of lancamentos) {
+      const piKey = l.numeroPi ? `PI_${l.numeroPi.trim().toLowerCase()}` : null;
+      const appSheetKey = l.appSheetId && l.appSheetId.includes('-') 
+        ? `APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
+        : null;
+
+      const groupKey = piKey || appSheetKey;
+      if (!groupKey) continue;
+
+      if (!piGroups.has(groupKey)) {
+        piGroups.set(groupKey, []);
+      }
+      piGroups.get(groupKey)!.push(l);
+    }
+
+    let totalCopiados = 0;
+
+    for (const [, group] of piGroups.entries()) {
+      if (group.length < 2) continue;
+
+      const allDocsMap = new Map<string, typeof group[0]['documentos'][0]>();
+      for (const item of group) {
+        for (const doc of item.documentos) {
+          const docKey = doc.caminhoOriginal || doc.urlPublica || doc.nomeOriginal;
+          if (docKey && !allDocsMap.has(docKey)) {
+            allDocsMap.set(docKey, doc);
+          }
+        }
+      }
+
+      if (allDocsMap.size === 0) continue;
+
+      for (const targetLancamento of group) {
+        const existingKeys = new Set(
+          targetLancamento.documentos.map(d => d.caminhoOriginal || d.urlPublica || d.nomeOriginal)
+        );
+
+        for (const [key, sourceDoc] of allDocsMap.entries()) {
+          if (!existingKeys.has(key)) {
+            await db.documento.create({
+              data: {
+                lancamentoId: targetLancamento.id,
+                tipoDocumentoId: sourceDoc.tipoDocumentoId,
+                nomeOriginal: sourceDoc.nomeOriginal,
+                caminhoOriginal: sourceDoc.caminhoOriginal,
+                urlPublica: sourceDoc.urlPublica,
+                tamanhoBytes: sourceDoc.tamanhoBytes,
+                observacao: sourceDoc.observacao,
+                status: sourceDoc.status,
+                planilhaOrigem: sourceDoc.planilhaOrigem,
+                colunaOrigem: sourceDoc.colunaOrigem,
+                usuarioResponsavel: 'Sincronização PI/Lote',
+              },
+            });
+            totalCopiados++;
+          }
+        }
+      }
+    }
+
+    refreshLancamento();
+    return { success: true, count: totalCopiados };
+  } catch (error) {
+    console.error('Erro ao sincronizar documentos de PI:', error);
+    return { success: false, error: 'Não foi possível sincronizar os anexos.' };
+  }
+}
+
 
