@@ -98,3 +98,68 @@ export async function updateDocumento(
   }
 }
 
+export async function adicionarLinkDocumento(
+  lancamentoId: string,
+  data: {
+    urlPublica: string;
+    nomeOriginal?: string;
+    tipoDocumentoId?: string;
+    novoTipoDocumento?: string;
+    observacao?: string;
+  }
+) {
+  try {
+    const lancamento = await db.lancamento.findUnique({ where: { id: lancamentoId } });
+    if (!lancamento) throw new Error('Lançamento não encontrado.');
+
+    if (!data.urlPublica || !data.urlPublica.trim()) {
+      throw new Error('Informe o link/URL da Nota Fiscal.');
+    }
+
+    let typeId = data.tipoDocumentoId;
+    if (!typeId || typeId === 'NOVO') {
+      const typeName = data.novoTipoDocumento?.trim() || 'Nota Fiscal';
+      const typeObj = await db.tipoDocumento.upsert({
+        where: { nome: typeName },
+        update: {},
+        create: { nome: typeName },
+      });
+      typeId = typeObj.id;
+    }
+
+    const nome = data.nomeOriginal?.trim() || 'Link da Nota Fiscal';
+    const urlFormatada = data.urlPublica.trim().startsWith('http') 
+      ? data.urlPublica.trim() 
+      : `https://${data.urlPublica.trim()}`;
+
+    const doc = await db.documento.create({
+      data: {
+        lancamentoId,
+        tipoDocumentoId: typeId,
+        nomeOriginal: nome,
+        urlPublica: urlFormatada,
+        caminhoOriginal: null,
+        tamanhoBytes: 0,
+        observacao: data.observacao?.trim() || null,
+        usuarioResponsavel: 'Inclusão de Link',
+      },
+    });
+
+    await db.historicoLancamento.create({
+      data: {
+        lancamentoId,
+        acao: 'INCLUSAO_DOCUMENTO',
+        descricao: `Link da Nota Fiscal/Documento adicionado: "${doc.nomeOriginal}" (${urlFormatada}).`,
+        usuario: 'Usuário',
+      },
+    });
+
+    revalidatePath(`/lancamento/${lancamentoId}`);
+    revalidatePath('/lancamentos');
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao adicionar link de documento:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Não foi possível salvar o link.' };
+  }
+}
+

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Download, Pencil, Trash2, Save, X, Loader2 } from 'lucide-react';
+import { FileText, Download, Pencil, Trash2, Save, X, Loader2, ExternalLink } from 'lucide-react';
 import { CopyButton } from '@/components/CopyButton';
 import { deleteDocumento, updateDocumento } from '@/actions/documentos';
 import { fixMojibake } from '@/lib/utils';
@@ -211,6 +211,11 @@ export function DocumentoCard({ doc, tiposDocumento }: DocumentoCardProps) {
                   Importado e preservado
                 </span>
               )}
+              {doc.urlPublica && !doc.caminhoOriginal && (
+                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 border border-indigo-200">
+                  🔗 Link Externo
+                </span>
+              )}
             </div>
             <p className={`mt-1 text-sm font-semibold truncate ${
               isCancelled ? 'text-slate-500 line-through' : 'text-slate-700'
@@ -235,9 +240,10 @@ export function DocumentoCard({ doc, tiposDocumento }: DocumentoCardProps) {
               href={doc.urlPublica}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-all active:scale-[0.95] shadow-sm"
             >
-              <Download className="h-4 w-4" /> Abrir no Drive
+              {doc.caminhoOriginal ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+              {doc.caminhoOriginal ? 'Abrir no Drive' : 'Abrir Link da Nota'}
             </a>
           ) : doc.caminhoOriginal ? (
             <CopyButton value={doc.caminhoOriginal} label="Copiar caminho original" />

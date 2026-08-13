@@ -257,7 +257,7 @@ export async function createLancamento(formData: FormData) {
           colaboradorId,
           agenciaId: String(formData.get('agenciaId') || '') || null,
           veiculoId: String(formData.get('veiculoId') || '') || null,
-          numeroNotaFiscal: nf, // Mesma NF inicial
+          numeroNotaFiscal: i === 0 ? nf : null, // NF inicial informada fica apenas na 1ª parcela (demais ficam sem NF para emissão mensal)
           descricao: String(formData.get('descricao') || '') || null,
           valor: valorParcela,
           dataEmissao: dataEmissaoBase,
