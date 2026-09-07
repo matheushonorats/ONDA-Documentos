@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Calendar, 
@@ -14,15 +14,25 @@ import {
   Building2,
   DollarSign,
   Info,
-  CheckCircle2
+  CheckCircle2,
+  UploadCloud,
+  Loader2,
+  AlertCircle,
+  Zap,
+  Check,
+  FileUp,
+  FileCheck2,
+  RotateCcw
 } from 'lucide-react';
 import { createLancamento } from '@/actions/lancamentos';
+import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
+import type { ExtracaoNfeResult } from '@/lib/nfParser';
 
 type Props = {
   initialTipo: 'RECEITA' | 'DESPESA';
-  clientes: { id: string, razaoSocial: string, nomeFantasia: string | null }[];
+  clientes: { id: string, razaoSocial: string, nomeFantasia: string | null, cnpj?: string | null, cidade?: string | null }[];
   colaboradores: { id: string, nome: string }[];
-  agencias: { id: string, nome: string }[];
+  agencias: { id: string, nome: string, cnpj?: string | null }[];
   tiposDocumento: { id: string, nome: string }[];
   veiculos: { id: string, nome: string }[];
 };
@@ -102,6 +112,224 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const colaboradoresFiltrados = colaboradores.filter(c => c.nome.toLowerCase().includes(buscaPessoa.toLowerCase()));
   const agenciasFiltradas = agencias.filter(a => a.nome.toLowerCase().includes(buscaAgencia.toLowerCase()));
   const veiculosFiltrados = veiculos.filter(v => v.nome.toLowerCase().includes(buscaVeiculo.toLowerCase()));
+
+  // Estados do Preenchimento Automático por NF (PDF / Link)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [autoNfModo, setAutoNfModo] = useState<'ARQUIVO' | 'LINK'>('ARQUIVO');
+  const [autoNfUrl, setAutoNfUrl] = useState('');
+  const [isProcessingNf, setIsProcessingNf] = useState(false);
+  const [isDraggingNf, setIsDraggingNf] = useState(false);
+  const [autoClienteId, setAutoClienteId] = useState<string | null>(null);
+  const [autoAgenciaId, setAutoAgenciaId] = useState<string | null>(null);
+  const [autoVeiculoId, setAutoVeiculoId] = useState<string | null>(null);
+  const [nfExtracaoFeedback, setNfExtracaoFeedback] = useState<{
+    sucesso: boolean;
+    mensagem: string;
+    detalhes?: {
+      totalCampos: number;
+      origem: 'PDF' | 'URL';
+      numeroNf?: string;
+      cliente?: { nome?: string; vinculadoId: boolean; novo: boolean };
+      agencia?: { nome?: string; vinculadoId: boolean };
+      veiculo?: { nome?: string; vinculadoId: boolean };
+      valor?: number;
+      vencimento?: string;
+      pi?: string;
+      mesRef?: string;
+    };
+  } | null>(null);
+
+  const aplicarDadosExtraidos = (dados: NonNullable<ExtracaoNfeResult['dados']>, uploadedFile?: File) => {
+    // 1. Tipo do Lançamento: NFS-e da rádio é sempre Receita de Cliente
+    setTipoLancamento('RECEITA');
+
+    // 2. Tomador / Cliente
+    if (dados.clienteMatched && dados.clienteId) {
+      setNovoRegistro(false);
+      setAutoClienteId(dados.clienteId);
+      setBuscaPessoa(dados.clienteNome || '');
+    } else if (dados.novoCliente) {
+      setNovoRegistro(true);
+      setAutoClienteId(null);
+      setNovoPessoaNome(dados.novoCliente.razaoSocial);
+      if (dados.novoCliente.cnpj) setNovoPessoaDoc(dados.novoCliente.cnpj);
+      if (dados.novoCliente.uf) setSelectedUf(dados.novoCliente.uf);
+      if (dados.novoCliente.cidade) setNovoClienteCidade(dados.novoCliente.cidade);
+    } else if (dados.tomadorNome) {
+      setNovoRegistro(true);
+      setAutoClienteId(null);
+      setNovoPessoaNome(dados.tomadorNome);
+      if (dados.tomadorCnpj) setNovoPessoaDoc(dados.tomadorCnpj);
+      if (dados.tomadorUf) setSelectedUf(dados.tomadorUf);
+      if (dados.tomadorCidade) setNovoClienteCidade(dados.tomadorCidade);
+    }
+
+    // 3. Agência
+    if (dados.agenciaMatched && dados.agenciaId) {
+      setAutoAgenciaId(dados.agenciaId);
+      setBuscaAgencia(dados.agenciaNome || '');
+    } else if (dados.agenciaNome) {
+      setAutoAgenciaId(null);
+      setBuscaAgencia(dados.agenciaNome);
+    }
+
+    // 4. Veículo
+    if (dados.veiculoMatched && dados.veiculoId) {
+      setAutoVeiculoId(dados.veiculoId);
+      setBuscaVeiculo(dados.veiculoNome || '');
+    } else if (dados.veiculoNome) {
+      setAutoVeiculoId(null);
+      setBuscaVeiculo(dados.veiculoNome);
+    }
+
+    // 5. Dados da Nota Fiscal
+    if (dados.numeroNotaFiscal) {
+      setNumeroNotaFiscal(dados.numeroNotaFiscal);
+    }
+    if (dados.dataEmissao) {
+      setDataEmissao(dados.dataEmissao);
+    }
+    if (dados.vencimento) {
+      setVencimento(dados.vencimento);
+    }
+    if (dados.numeroPi) {
+      setNumeroPi(dados.numeroPi);
+    }
+    if (dados.mesAnoReferencia) {
+      if (/^\d{2}\/\d{4}$/.test(dados.mesAnoReferencia)) {
+        const [m, y] = dados.mesAnoReferencia.split('/');
+        setMesAnoReferencia(`${y}-${m}`);
+      } else {
+        setMesAnoReferencia(dados.mesAnoReferencia);
+      }
+    }
+    if (dados.valor !== undefined && dados.valor !== null) {
+      setValor(dados.valor.toFixed(2));
+    }
+    if (dados.descricao) {
+      setDescricao(dados.descricao);
+    }
+
+    // 6. Arquivo PDF anexado automaticamente ou Link salvo
+    if (uploadedFile) {
+      const tipoNfObj =
+        tiposDocumento.find(t => t.nome.toLowerCase() === 'nota fiscal') ||
+        tiposDocumento.find(t => t.nome.toLowerCase().includes('nota')) ||
+        tiposDocumento[0];
+      const tipoId = tipoNfObj ? tipoNfObj.id : '';
+
+      setArquivos(prev => {
+        const alreadyExists = prev.some(a => a.file && a.file.name === uploadedFile.name);
+        if (alreadyExists) return prev;
+        return [
+          {
+            tipoId,
+            novoTipoDocumento: '',
+            nomeOriginal: uploadedFile.name,
+            file: uploadedFile,
+          },
+          ...prev,
+        ];
+      });
+    }
+
+    if (dados.urlNotaFiscal) {
+      setUrlNotaFiscal(dados.urlNotaFiscal);
+    }
+
+    // 7. Feedback de Sucesso Detalhado
+    setNfExtracaoFeedback({
+      sucesso: true,
+      mensagem: `✨ ${dados.totalCamposIdentificados} campos identificados e preenchidos automaticamente!`,
+      detalhes: {
+        totalCampos: dados.totalCamposIdentificados,
+        origem: dados.origem,
+        numeroNf: dados.numeroNotaFiscal,
+        cliente: dados.clienteMatched
+          ? { nome: dados.clienteNome, vinculadoId: true, novo: false }
+          : { nome: dados.tomadorNome, vinculadoId: false, novo: true },
+        agencia: dados.agenciaNome ? { nome: dados.agenciaNome, vinculadoId: dados.agenciaMatched } : undefined,
+        veiculo: dados.veiculoNome ? { nome: dados.veiculoNome, vinculadoId: dados.veiculoMatched } : undefined,
+        valor: dados.valor,
+        vencimento: dados.vencimento,
+        pi: dados.numeroPi,
+        mesRef: dados.mesAnoReferencia,
+      },
+    });
+  };
+
+  const handleProcessPdfFile = async (file: File) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      alert('Por favor, selecione um arquivo no formato PDF (.pdf).');
+      return;
+    }
+
+    setIsProcessingNf(true);
+    setNfExtracaoFeedback(null);
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await extrairDadosNotaFiscal(fd);
+
+      if (res.success && res.dados) {
+        aplicarDadosExtraidos(res.dados, file);
+      } else {
+        setNfExtracaoFeedback({
+          sucesso: false,
+          mensagem: res.error || 'Não foi possível extrair os dados deste PDF.',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setNfExtracaoFeedback({
+        sucesso: false,
+        mensagem: 'Erro inesperado ao processar o arquivo PDF.',
+      });
+    } finally {
+      setIsProcessingNf(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleProcessUrl = async () => {
+    if (!autoNfUrl.trim()) {
+      alert('Por favor, cole o link da Nota Fiscal.');
+      return;
+    }
+
+    setIsProcessingNf(true);
+    setNfExtracaoFeedback(null);
+
+    try {
+      const res = await extrairDadosNotaFiscal(autoNfUrl.trim());
+
+      if (res.success && res.dados) {
+        aplicarDadosExtraidos(res.dados);
+      } else {
+        setNfExtracaoFeedback({
+          sucesso: false,
+          mensagem: res.error || 'Não foi possível extrair os dados da Nota Fiscal a partir deste link.',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setNfExtracaoFeedback({
+        sucesso: false,
+        mensagem: 'Erro ao conectar à URL da Nota Fiscal.',
+      });
+    } finally {
+      setIsProcessingNf(false);
+    }
+  };
+
+  const limparAutoNf = () => {
+    setNfExtracaoFeedback(null);
+    setAutoNfUrl('');
+  };
 
   // Dynamic preview of installments
   const parcelasPreview = useMemo(() => {
@@ -244,16 +472,20 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         }
       } else {
         if (tipoLancamento === 'RECEITA') {
-          const queryClean = buscaPessoa.trim().toLowerCase();
-          const clienteSelecionado = clientes.find(c => 
-            (c.nomeFantasia && c.nomeFantasia.toLowerCase() === queryClean) ||
-            c.razaoSocial.toLowerCase() === queryClean ||
-            `${c.razaoSocial} (${c.nomeFantasia || ''})`.toLowerCase() === queryClean
-          ) || clientes.find(c => 
-            c.razaoSocial.toLowerCase().includes(queryClean) || 
-            (c.nomeFantasia && c.nomeFantasia.toLowerCase().includes(queryClean))
-          );
-          if (clienteSelecionado) formData.append('clienteId', clienteSelecionado.id);
+          if (autoClienteId) {
+            formData.append('clienteId', autoClienteId);
+          } else {
+            const queryClean = buscaPessoa.trim().toLowerCase();
+            const clienteSelecionado = clientes.find(c => 
+              (c.nomeFantasia && c.nomeFantasia.toLowerCase() === queryClean) ||
+              c.razaoSocial.toLowerCase() === queryClean ||
+              `${c.razaoSocial} (${c.nomeFantasia || ''})`.toLowerCase() === queryClean
+            ) || clientes.find(c => 
+              c.razaoSocial.toLowerCase().includes(queryClean) || 
+              (c.nomeFantasia && c.nomeFantasia.toLowerCase().includes(queryClean))
+            );
+            if (clienteSelecionado) formData.append('clienteId', clienteSelecionado.id);
+          }
         } else {
           const queryClean = buscaPessoa.trim().toLowerCase();
           const colaboradorSelecionado = colaboradores.find(c => 
@@ -265,13 +497,21 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         }
       }
       
-      const agenciaQuery = buscaAgencia.trim().toLowerCase();
-      const agenciaSelecionada = agencias.find(a => a.nome.toLowerCase() === agenciaQuery || a.id === buscaAgencia);
-      if (agenciaSelecionada) formData.append('agenciaId', agenciaSelecionada.id);
+      if (autoAgenciaId) {
+        formData.append('agenciaId', autoAgenciaId);
+      } else {
+        const agenciaQuery = buscaAgencia.trim().toLowerCase();
+        const agenciaSelecionada = agencias.find(a => a.nome.toLowerCase() === agenciaQuery || a.id === buscaAgencia);
+        if (agenciaSelecionada) formData.append('agenciaId', agenciaSelecionada.id);
+      }
 
-      const veiculoQuery = buscaVeiculo.trim().toLowerCase();
-      const veiculoSelecionado = veiculos.find(v => v.nome.toLowerCase() === veiculoQuery || v.id === buscaVeiculo);
-      if (veiculoSelecionado) formData.append('veiculoId', veiculoSelecionado.id);
+      if (autoVeiculoId) {
+        formData.append('veiculoId', autoVeiculoId);
+      } else {
+        const veiculoQuery = buscaVeiculo.trim().toLowerCase();
+        const veiculoSelecionado = veiculos.find(v => v.nome.toLowerCase() === veiculoQuery || v.id === buscaVeiculo);
+        if (veiculoSelecionado) formData.append('veiculoId', veiculoSelecionado.id);
+      }
 
       if (numeroNotaFiscal.trim()) formData.append('numeroNotaFiscal', numeroNotaFiscal.trim());
       if (urlNotaFiscal.trim()) formData.append('urlNotaFiscal', urlNotaFiscal.trim());
@@ -317,6 +557,247 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      {/* ⚡ CARD DE PREENCHIMENTO AUTOMÁTICO POR NOTA FISCAL */}
+      <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-purple-50/60 border-2 border-indigo-200/90 rounded-2xl p-6 sm:p-7 shadow-sm transition-all space-y-5 relative overflow-hidden">
+        {/* Glow sutil no topo */}
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-indigo-200/30 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Cabeçalho do Card */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-200 mt-0.5">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  ⚡ Preenchimento Automático por Nota Fiscal (PDF ou Link)
+                </h2>
+                <span className="bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm">
+                  Leitor Inteligente
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+                Arraste o PDF da NFS-e ou cole o link público para identificar e preencher tomador, agência, rádio, valores, vencimento e PI instantaneamente.
+              </p>
+            </div>
+          </div>
+
+          {/* Abas Alternadoras: Arquivo PDF vs Link */}
+          <div className="flex bg-white/90 p-1 rounded-xl border border-indigo-100 shadow-sm w-fit self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => { setAutoNfModo('ARQUIVO'); setNfExtracaoFeedback(null); }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                autoNfModo === 'ARQUIVO'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileUp className="w-3.5 h-3.5" /> Arquivo PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAutoNfModo('LINK'); setNfExtracaoFeedback(null); }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                autoNfModo === 'LINK'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LinkIcon className="w-3.5 h-3.5" /> Link da Nota
+            </button>
+          </div>
+        </div>
+
+        {/* Modo 1: Upload / Drag & Drop de PDF */}
+        {autoNfModo === 'ARQUIVO' && (
+          <div className="relative z-10">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleProcessPdfFile(file);
+              }}
+            />
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingNf(true);
+              }}
+              onDragLeave={() => setIsDraggingNf(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingNf(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleProcessPdfFile(file);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-6 sm:p-7 text-center cursor-pointer transition-all ${
+                isDraggingNf
+                  ? 'border-indigo-600 bg-indigo-100/70 scale-[1.01]'
+                  : 'border-indigo-200 hover:border-indigo-400 bg-white/70 hover:bg-white'
+              }`}
+            >
+              <div className="flex flex-col items-center justify-center gap-2">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <UploadCloud className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-800">
+                    Arraste o PDF da Nota Fiscal aqui ou{' '}
+                    <span className="text-indigo-600 underline font-extrabold">clique para selecionar</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Reconhece NFS-e de São Sebastião (ii-Brasil) e modelos municipais padrão
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modo 2: Input de Link / URL Pública */}
+        {autoNfModo === 'LINK' && (
+          <div className="relative z-10 space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              Link Direto do PDF da Nota Fiscal
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="url"
+                value={autoNfUrl}
+                onChange={(e) => setAutoNfUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleProcessUrl();
+                  }
+                }}
+                placeholder="Ex: https://saosebastiao.iibr.com.br/prestadores/43579370000138/nfse_pdf/855_..."
+                className="flex-1 px-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white text-sm text-slate-900 shadow-sm placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                disabled={isProcessingNf || !autoNfUrl.trim()}
+                onClick={handleProcessUrl}
+                className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm shadow-sm cursor-pointer"
+              >
+                {isProcessingNf ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                Preencher por Link
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Cole o link do PDF público gerado pelo sistema de emissão da prefeitura.
+            </p>
+          </div>
+        )}
+
+        {/* Estado de Processamento Ativo */}
+        {isProcessingNf && (
+          <div className="p-4 bg-indigo-600/10 border border-indigo-200 rounded-xl flex items-center gap-3 text-indigo-900 animate-pulse relative z-10">
+            <Loader2 className="w-5 h-5 animate-spin text-indigo-600 shrink-0" />
+            <div className="text-xs sm:text-sm font-semibold">
+              Processando documento, identificando tributação e cruzando com o banco de dados...
+            </div>
+          </div>
+        )}
+
+        {/* Banner de Feedback da Extração */}
+        {nfExtracaoFeedback && !isProcessingNf && (
+          <div
+            className={`p-4 sm:p-5 rounded-xl border relative z-10 transition-all ${
+              nfExtracaoFeedback.sucesso
+                ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50/90 border-rose-200 text-rose-950'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                {nfExtracaoFeedback.sucesso ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                )}
+                <div>
+                  <h4 className="text-sm font-bold">
+                    {nfExtracaoFeedback.mensagem}
+                  </h4>
+                  {nfExtracaoFeedback.sucesso && nfExtracaoFeedback.detalhes && (
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      {nfExtracaoFeedback.detalhes.numeroNf && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-bold text-emerald-800 shadow-2xs">
+                          NF: #{nfExtracaoFeedback.detalhes.numeroNf}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.cliente?.nome && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          Cliente: {nfExtracaoFeedback.detalhes.cliente.nome}
+                          <span
+                            className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-black uppercase ${
+                              nfExtracaoFeedback.detalhes.cliente.vinculadoId
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {nfExtracaoFeedback.detalhes.cliente.vinculadoId ? 'ID Vinculado' : 'Novo Cadastro'}
+                          </span>
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.veiculo?.nome && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          Veículo: {nfExtracaoFeedback.detalhes.veiculo.nome}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.agencia?.nome && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          Agência: {nfExtracaoFeedback.detalhes.agencia.nome}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.valor !== undefined && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-bold text-emerald-800 shadow-2xs">
+                          Valor: {nfExtracaoFeedback.detalhes.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.vencimento && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          Vencimento: {new Date(nfExtracaoFeedback.detalhes.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.pi && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          PI: {nfExtracaoFeedback.detalhes.pi}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.mesRef && (
+                        <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-semibold text-emerald-800 shadow-2xs">
+                          Ref: {nfExtracaoFeedback.detalhes.mesRef}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={limparAutoNf}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                title="Fechar feedback"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Seção 1: Origem / Destino & Veículo */}
       <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm space-y-6">
         <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -377,7 +858,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                 type="text" 
                 list="pessoas-list"
                 value={buscaPessoa} 
-                onChange={(e) => setBuscaPessoa(e.target.value)} 
+                onChange={(e) => { setBuscaPessoa(e.target.value); setAutoClienteId(null); }} 
                 placeholder={`Digite o nome do ${tipoLancamento === 'RECEITA' ? 'cliente ou razão social' : 'colaborador ou fornecedor'}...`}
                 className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm" 
               />
@@ -465,7 +946,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
               </label>
               <select 
                 value={buscaVeiculo} 
-                onChange={(e) => setBuscaVeiculo(e.target.value)} 
+                onChange={(e) => { setBuscaVeiculo(e.target.value); setAutoVeiculoId(null); }} 
                 className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 shadow-sm"
               >
                 <option value="">Selecione o veículo da emissora...</option>
@@ -482,7 +963,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                   type="text" 
                   list="agencias-list"
                   value={buscaAgencia} 
-                  onChange={(e) => setBuscaAgencia(e.target.value)} 
+                  onChange={(e) => { setBuscaAgencia(e.target.value); setAutoAgenciaId(null); }} 
                   placeholder="Se houver, busque a agência..."
                   className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 bg-white shadow-sm" 
                 />
@@ -903,7 +1384,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
 
         <button 
           type="submit" 
-          disabled={isSubmitting} 
+          disabled={isSubmitting || isProcessingNf} 
           className="flex items-center justify-center px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 hover:shadow-lg transition-all active:scale-[0.98] shadow-md disabled:opacity-50 text-sm sm:text-base cursor-pointer"
         >
           {isSubmitting ? 'Salvando Lançamento...' : 'Salvar Novo Lançamento'}
