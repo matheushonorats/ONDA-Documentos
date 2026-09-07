@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { TipoDocumento, Lancamento } from '@/generated/prisma';
-import { UploadCloud, File, X, Loader2, ArrowLeft, Link as LinkIcon } from 'lucide-react';
+import { UploadCloud, File, X, Loader2, ArrowLeft, Link as LinkIcon, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { adicionarDocumentos } from '@/actions/lancamentos';
 import { adicionarLinkDocumento } from '@/actions/documentos';
@@ -15,6 +15,9 @@ export function NovoDocumentoClient({
   lancamento: Lancamento & {
     cliente: { razaoSocial: string, nomeFantasia: string | null } | null;
     colaborador: { nome: string } | null;
+    veiculo?: { nome: string } | null;
+    agencia?: { nome: string } | null;
+    documentos?: Array<{ id: string; nomeOriginal: string; urlPublica: string | null; tipoDocumento: { nome: string } | null }>;
   };
   tiposDocumento: TipoDocumento[];
 }) {
@@ -44,8 +47,29 @@ export function NovoDocumentoClient({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const novasFiles = Array.from(e.target.files);
+      const novosTipos = novasFiles.map(file => {
+        const lower = file.name.toLowerCase();
+        if (lower.includes('nota') || lower.includes('nf') || lower.includes('danfe')) {
+          const t = tiposDocumento.find(td => td.nome.toLowerCase().includes('nota') || td.nome.toLowerCase().includes('nf'));
+          if (t) return t.id;
+        } else if (lower.includes('pi') || lower.includes('pedido')) {
+          const t = tiposDocumento.find(td => td.nome.toLowerCase().includes('pi') || td.nome.toLowerCase().includes('pedido'));
+          if (t) return t.id;
+        } else if (lower.includes('contrato')) {
+          const t = tiposDocumento.find(td => td.nome.toLowerCase().includes('contrato'));
+          if (t) return t.id;
+        } else if (lower.includes('boleto')) {
+          const t = tiposDocumento.find(td => td.nome.toLowerCase().includes('boleto'));
+          if (t) return t.id;
+        } else if (lower.includes('comprovante') || lower.includes('recibo')) {
+          const t = tiposDocumento.find(td => td.nome.toLowerCase().includes('comprovante') || td.nome.toLowerCase().includes('recibo'));
+          if (t) return t.id;
+        }
+        return '';
+      });
+
       setArquivos(prev => [...prev, ...novasFiles]);
-      setTiposSelecionados(prev => [...prev, ...novasFiles.map(() => '')]);
+      setTiposSelecionados(prev => [...prev, ...novosTipos]);
       setNovosTiposTexto(prev => [...prev, ...novasFiles.map(() => '')]);
     }
   };
@@ -137,25 +161,100 @@ export function NovoDocumentoClient({
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <Link href={`/lancamento/${lancamento.id}`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-1" />
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <Link href={`/lancamento/${lancamento.id}`} className="inline-flex items-center text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors">
+          <ArrowLeft className="w-4 h-4 mr-1.5" />
           Voltar para o lançamento
         </Link>
+        <span className="text-xs font-mono text-slate-400">
+          ID: {lancamento.appSheetId || lancamento.id.slice(0, 8)}
+        </span>
+      </div>
+
+      {/* Context Card do Lançamento Alvo */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+              lancamento.tipoLancamento === 'RECEITA' 
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                : 'bg-rose-50 text-rose-700 border border-rose-200'
+            }`}>
+              {lancamento.tipoLancamento === 'RECEITA' ? 'Receita · Cliente' : 'Despesa · Fornecedor'}
+            </span>
+            {lancamento.veiculo && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {lancamento.veiculo.nome}
+              </span>
+            )}
+            {lancamento.numeroPi && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                PI: {lancamento.numeroPi}
+              </span>
+            )}
+          </div>
+          <div>
+            {lancamento.numeroNotaFiscal ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5" /> NF nº {lancamento.numeroNotaFiscal}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                <AlertCircle className="w-3.5 h-3.5" /> Sem NF Cadastrada
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs sm:text-sm">
+          <div>
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Origem / Destino</span>
+            <p className="font-bold text-slate-900 mt-0.5 truncate">{title}</p>
+          </div>
+          <div>
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Valor</span>
+            <p className="font-bold text-slate-900 mt-0.5">
+              {lancamento.valor ? lancamento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+            </p>
+          </div>
+          <div>
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Vencimento</span>
+            <p className="font-bold text-slate-900 mt-0.5">
+              {lancamento.vencimento ? new Date(lancamento.vencimento).toLocaleDateString('pt-BR') : '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* Documentos já anexados neste lançamento */}
+        {lancamento.documentos && lancamento.documentos.length > 0 && (
+          <div className="pt-3 border-t border-slate-100">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Documentos já anexados nesta operação ({lancamento.documentos.length}):
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {lancamento.documentos.map((doc) => (
+                <span key={doc.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 text-slate-700 border border-slate-200">
+                  <span className="font-bold text-indigo-700">{doc.tipoDocumento?.nome || 'Doc'}:</span>
+                  <span className="truncate max-w-[160px]">{doc.nomeOriginal}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-8 bg-slate-50 border-b border-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <UploadCloud className="w-6 h-6 text-indigo-600" />
-            Adicionar Documento / Nota Fiscal
+        <div className="p-7 bg-slate-50 border-b border-slate-200">
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <UploadCloud className="w-5 h-5 text-indigo-600" />
+            Anexar Documento ou Link
           </h1>
-          <p className="text-slate-500 mt-2">
-            Anexando à nota/lançamento de <strong className="text-slate-800">{title}</strong>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Escolha se deseja fazer upload de um arquivo (PDF, imagem, áudio) ou cadastrar o link público da NF.
           </p>
 
-          <div className="flex gap-2 mt-6 bg-slate-200/60 p-1 rounded-xl">
+          <div className="flex gap-2 mt-5 bg-slate-200/60 p-1 rounded-xl">
             <button
               type="button"
               onClick={() => { setModo('UPLOAD'); setError(null); }}

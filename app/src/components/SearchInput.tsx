@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Search } from 'lucide-react';
 
-export function SearchInput({ placeholder = "Pesquisar..." }: { placeholder?: string }) {
+function SearchInputContent({ placeholder = "Pesquisar..." }: { placeholder?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(searchParams.get('q') || '');
@@ -41,5 +41,17 @@ export function SearchInput({ placeholder = "Pesquisar..." }: { placeholder?: st
         placeholder={placeholder}
       />
     </div>
+  );
+}
+
+export function SearchInput({ placeholder = "Pesquisar..." }: { placeholder?: string }) {
+  return (
+    <Suspense fallback={
+      <div className="relative flex-1">
+        <div className="h-12 rounded-xl border border-slate-200 bg-slate-100/50 animate-pulse" />
+      </div>
+    }>
+      <SearchInputContent placeholder={placeholder} />
+    </Suspense>
   );
 }

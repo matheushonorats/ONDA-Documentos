@@ -46,7 +46,12 @@ function refreshLancamento(id?: string) {
   }
 }
 
-export async function searchLancamentos(query = '', tipo = 'RECEITA', page = 1) {
+export async function searchLancamentos(
+  query = '',
+  tipo = 'RECEITA',
+  page = 1,
+  filters?: { statusDoc?: string; veiculoId?: string }
+) {
   const cleaned = query.trim();
   const validType = tipo === 'DESPESA' ? 'DESPESA' : tipo === 'TODOS' ? null : 'RECEITA';
   const numericValue = cleaned ? parseNumber(cleaned) : null;
@@ -72,16 +77,39 @@ export async function searchLancamentos(query = '', tipo = 'RECEITA', page = 1) 
   if (numericValue !== null) or.push({ valor: { equals: numericValue } });
   if (searchedDate) or.push({ dataEmissao: searchedDate }, { vencimento: searchedDate }, { dataPagamento: searchedDate });
 
+  const andConditions: Prisma.LancamentoWhereInput[] = [];
+
+  if (filters?.statusDoc === 'SEM_NF') {
+    andConditions.push({
+      OR: [{ numeroNotaFiscal: null }, { numeroNotaFiscal: '' }],
+    });
+  } else if (filters?.statusDoc === 'COM_NF') {
+    andConditions.push({
+      AND: [{ numeroNotaFiscal: { not: null } }, { numeroNotaFiscal: { not: '' } }],
+    });
+  } else if (filters?.statusDoc === 'COM_DOCS') {
+    andConditions.push({ documentos: { some: {} } });
+  } else if (filters?.statusDoc === 'SEM_DOCS') {
+    andConditions.push({ documentos: { none: {} } });
+  }
+
+  if (filters?.veiculoId && filters.veiculoId !== 'TODOS') {
+    andConditions.push({ veiculoId: filters.veiculoId });
+  }
+
   const take = 50;
   const skip = (page - 1) * take;
+
+  const whereClause: Prisma.LancamentoWhereInput = {
+    ...(validType ? { tipoLancamento: validType } : {}),
+    ...(or.length ? { OR: or } : {}),
+    ...(andConditions.length ? { AND: andConditions } : {}),
+  };
 
   const lancamentos = await db.lancamento.findMany({
     take: take + 1,
     skip,
-    where: {
-      ...(validType ? { tipoLancamento: validType } : {}),
-      ...(or.length ? { OR: or } : {}),
-    },
+    where: whereClause,
     include: {
       cliente: true,
       agencia: true,

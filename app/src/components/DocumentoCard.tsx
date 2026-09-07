@@ -2,10 +2,24 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Download, Pencil, Trash2, Save, X, Loader2, ExternalLink } from 'lucide-react';
+import {
+  FileText,
+  Download,
+  Pencil,
+  Trash2,
+  Save,
+  X,
+  Loader2,
+  ExternalLink,
+  Radio,
+  CreditCard,
+  Link as LinkIcon,
+  FileCheck,
+} from 'lucide-react';
 import { CopyButton } from '@/components/CopyButton';
 import { deleteDocumento, updateDocumento } from '@/actions/documentos';
 import { fixMojibake } from '@/lib/utils';
+
 
 interface TipoDocumento {
   id: string;
@@ -187,16 +201,41 @@ export function DocumentoCard({ doc, tiposDocumento }: DocumentoCardProps) {
     );
   }
 
+  const isLink = Boolean(doc.urlPublica && !doc.caminhoOriginal);
+  const tipoLower = doc.tipoDocumento.nome.toLowerCase();
+
+  const getDocVisual = () => {
+    if (isCancelled) {
+      return { Icon: FileText, tone: 'bg-red-100 text-red-600' };
+    }
+    if (isLink) {
+      return { Icon: LinkIcon, tone: 'bg-blue-100 text-blue-700' };
+    }
+    if (tipoLower.includes('nota') || tipoLower.includes('nf')) {
+      return { Icon: FileText, tone: 'bg-emerald-100 text-emerald-700' };
+    }
+    if (tipoLower.includes('pi') || tipoLower.includes('contrato') || tipoLower.includes('autoriza')) {
+      return { Icon: FileCheck, tone: 'bg-indigo-100 text-indigo-700' };
+    }
+    if (tipoLower.includes('boleto') || tipoLower.includes('cobranca') || tipoLower.includes('cobrança')) {
+      return { Icon: CreditCard, tone: 'bg-amber-100 text-amber-700' };
+    }
+    if (tipoLower.includes('audio') || tipoLower.includes('áudio') || tipoLower.includes('censura')) {
+      return { Icon: Radio, tone: 'bg-purple-100 text-purple-700' };
+    }
+    return { Icon: FileText, tone: 'bg-slate-100 text-slate-700' };
+  };
+
+  const { Icon: DocIcon, tone: docTone } = getDocVisual();
+
   return (
-    <article className={`rounded-2xl border p-4 shadow-sm sm:p-5 transition-colors min-w-0 overflow-hidden ${
+    <article className={`rounded-2xl border p-4 shadow-xs sm:p-5 transition-colors min-w-0 overflow-hidden ${
       isCancelled ? 'border-red-200 bg-red-50/30 opacity-90' : 'border-slate-200 bg-white'
     }`}>
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center min-w-0">
         <div className="flex min-w-0 gap-3">
-          <span className={`h-fit rounded-xl p-2.5 shrink-0 ${
-            isCancelled ? 'bg-red-100 text-red-600' : 'bg-indigo-50 text-indigo-600'
-          }`}>
-            <FileText className="h-5 w-5" />
+          <span className={`h-fit rounded-xl p-2.5 shrink-0 ${docTone}`}>
+            <DocIcon className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -211,8 +250,8 @@ export function DocumentoCard({ doc, tiposDocumento }: DocumentoCardProps) {
                   Importado e preservado
                 </span>
               )}
-              {doc.urlPublica && !doc.caminhoOriginal && (
-                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 border border-indigo-200">
+              {isLink && (
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 border border-blue-200">
                   🔗 Link Externo
                 </span>
               )}
@@ -233,6 +272,7 @@ export function DocumentoCard({ doc, tiposDocumento }: DocumentoCardProps) {
             </p>
           </div>
         </div>
+
 
         <div className="flex shrink-0 flex-wrap items-center gap-2 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
           {doc.urlPublica ? (
