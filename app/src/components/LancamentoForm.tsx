@@ -73,8 +73,14 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
   
-  // Data Emissão pré-preenchida com hoje
-  const [dataEmissao, setDataEmissao] = useState(() => new Date().toISOString().split('T')[0]);
+  // Data Emissão pré-preenchida com a data local de hoje (fuso do Brasil)
+  const [dataEmissao, setDataEmissao] = useState(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [vencimento, setVencimento] = useState('');
   
   // Parcelamento
@@ -101,7 +107,9 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const parcelasPreview = useMemo(() => {
     if (!gerarParcelas || qtdParcelas < 2) return [];
     const totalVal = parseFloat(valor) || 0;
-    const valPerParcela = totalVal > 0 ? (totalVal / qtdParcelas).toFixed(2) : '0.00';
+    const totalCents = Math.round(totalVal * 100);
+    const baseCents = Math.floor(totalCents / qtdParcelas);
+    const remainderCents = totalCents - (baseCents * qtdParcelas);
     
     const items = [];
     const baseDate = vencimento ? new Date(vencimento + 'T12:00:00') : null;
@@ -142,12 +150,15 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         refStr = `${String(m).padStart(2, '0')}/${y}`;
       }
 
+      const parcelCents = (i === qtdParcelas - 1) ? baseCents + remainderCents : baseCents;
+      const parcelVal = totalVal > 0 ? parcelCents / 100 : null;
+
       items.push({
         numero: i + 1,
         total: qtdParcelas,
         vencimento: dataPrevista,
         mesRef: refStr,
-        valor: totalVal > 0 ? parseFloat(valPerParcela) : null,
+        valor: parcelVal,
         isPrimeira: i === 0,
       });
     }
@@ -233,17 +244,33 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         }
       } else {
         if (tipoLancamento === 'RECEITA') {
-          const clienteSelecionado = clientes.find(c => (c.nomeFantasia || c.razaoSocial) === buscaPessoa || c.razaoSocial === buscaPessoa);
+          const queryClean = buscaPessoa.trim().toLowerCase();
+          const clienteSelecionado = clientes.find(c => 
+            (c.nomeFantasia && c.nomeFantasia.toLowerCase() === queryClean) ||
+            c.razaoSocial.toLowerCase() === queryClean ||
+            `${c.razaoSocial} (${c.nomeFantasia || ''})`.toLowerCase() === queryClean
+          ) || clientes.find(c => 
+            c.razaoSocial.toLowerCase().includes(queryClean) || 
+            (c.nomeFantasia && c.nomeFantasia.toLowerCase().includes(queryClean))
+          );
           if (clienteSelecionado) formData.append('clienteId', clienteSelecionado.id);
         } else {
-          const colaboradorSelecionado = colaboradores.find(c => c.nome === buscaPessoa);
+          const queryClean = buscaPessoa.trim().toLowerCase();
+          const colaboradorSelecionado = colaboradores.find(c => 
+            c.nome.toLowerCase() === queryClean
+          ) || colaboradores.find(c => 
+            c.nome.toLowerCase().includes(queryClean)
+          );
           if (colaboradorSelecionado) formData.append('colaboradorId', colaboradorSelecionado.id);
         }
       }
       
-      const agenciaSelecionada = agencias.find(a => a.nome === buscaAgencia);
+      const agenciaQuery = buscaAgencia.trim().toLowerCase();
+      const agenciaSelecionada = agencias.find(a => a.nome.toLowerCase() === agenciaQuery || a.id === buscaAgencia);
       if (agenciaSelecionada) formData.append('agenciaId', agenciaSelecionada.id);
-      const veiculoSelecionado = veiculos.find(v => v.nome === buscaVeiculo);
+
+      const veiculoQuery = buscaVeiculo.trim().toLowerCase();
+      const veiculoSelecionado = veiculos.find(v => v.nome.toLowerCase() === veiculoQuery || v.id === buscaVeiculo);
       if (veiculoSelecionado) formData.append('veiculoId', veiculoSelecionado.id);
 
       if (numeroNotaFiscal.trim()) formData.append('numeroNotaFiscal', numeroNotaFiscal.trim());

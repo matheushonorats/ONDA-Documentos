@@ -256,14 +256,24 @@ export async function createLancamento(formData: FormData) {
     let qtdParcelas = gerarParcelas ? (parseInt(String(formData.get('qtdParcelas'))) || 1) : 1;
     if (qtdParcelas > 120) qtdParcelas = 120; // Cap de segurança (Max 10 anos)
     if (qtdParcelas < 1) qtdParcelas = 1;
-    
-    const valorParcela = valorTotalNum !== null ? parseFloat((valorTotalNum / qtdParcelas).toFixed(2)) : null;
+
+    // Cálculo exato de parcelas em centavos para eliminar qualquer perda residual
+    const totalCents = valorTotalNum !== null ? Math.round(valorTotalNum * 100) : null;
+    const baseCents = (totalCents !== null && qtdParcelas > 0) ? Math.floor(totalCents / qtdParcelas) : null;
+    const remainderCents = (totalCents !== null && baseCents !== null) ? totalCents - (baseCents * qtdParcelas) : 0;
 
     const dataEmissaoBase = parseDate(formData.get('dataEmissao'));
     const vencimentoBase = parseDate(formData.get('vencimento'));
     
-    const numeroPi = String(formData.get('numeroPi') || '') || null;
-    const numeroContrato = String(formData.get('numeroContrato') || '') || null;
+    let numeroPi = String(formData.get('numeroPi') || '') || null;
+    let numeroContrato = String(formData.get('numeroContrato') || '') || null;
+
+    // Garante que grupos de parcelas tenham sempre um identificador comum
+    if (gerarParcelas && !numeroPi && !numeroContrato) {
+      const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      numeroContrato = `PARC-${datePart}-${randPart}`;
+    }
     
     const mesAnoReferenciaBase = (() => {
       const val = String(formData.get('mesAnoReferencia') || '').trim();
@@ -296,6 +306,12 @@ export async function createLancamento(formData: FormData) {
       for (let i = 0; i < qtdParcelas; i++) {
         const currentVencimento = addMonthsDate(vencimentoBase, i);
         const currentRef = addMonthsRef(mesAnoReferenciaBase, i);
+        
+        // Ajusta os centavos restantes na última parcela para soma exata (100.00%)
+        const parcelCents = (totalCents !== null && baseCents !== null)
+          ? (i === qtdParcelas - 1 ? baseCents + remainderCents : baseCents)
+          : null;
+        const valorParcela = parcelCents !== null ? parcelCents / 100 : null;
         
         const lancamento = await db.lancamento.create({ data: {
           tipoLancamento,
@@ -397,7 +413,13 @@ export async function updateLancamento(id: string, formData: FormData) {
   try {
     const current = await db.lancamento.findUnique({
       where: { id },
-      include: { cliente: true, colaborador: true, agencia: true, veiculo: true },
+      include: {
+        cliente: true,
+        colaborador: true,
+        agencia: true,
+        veiculo: true,
+        documentos: { include: { tipoDocumento: true } },
+      },
     });
     if (!current) throw new Error('Lançamento não encontrado.');
 
@@ -438,6 +460,52 @@ export async function updateLancamento(id: string, formData: FormData) {
       agenciaId: String(formData.get('agenciaId') || '') || null,
     } });
 
+    // Gerenciamento sincronizado do Link / URL da Nota Fiscal
+    if (formData.has('urlNotaFiscal')) {
+      const rawUrl = String(formData.get('urlNotaFiscal') || '').trim();
+      const existingNfDoc = current.documentos.find(
+        (d) => (d.urlPublica && !d.caminhoOriginal) || d.tipoDocumento?.nome?.toLowerCase().includes('nota')
+      );
+
+      if (rawUrl) {
+        const urlFormatada = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+        const nomeDoc = newNf ? `Link da NF ${newNf}` : 'Link da Nota Fiscal Emitida';
+
+        if (existingNfDoc) {
+          if (existingNfDoc.urlPublica !== urlFormatada || existingNfDoc.nomeOriginal !== nomeDoc) {
+            await db.documento.update({
+              where: { id: existingNfDoc.id },
+              data: {
+                urlPublica: urlFormatada,
+                nomeOriginal: nomeDoc,
+              },
+            });
+            changes.push(`Link da Nota Fiscal atualizado`);
+          }
+        } else {
+          let tipoNfObj = await db.tipoDocumento.findFirst({ where: { nome: { contains: 'Nota Fiscal' } } });
+          if (!tipoNfObj) {
+            tipoNfObj = await db.tipoDocumento.create({ data: { nome: 'Nota Fiscal' } });
+          }
+          await db.documento.create({
+            data: {
+              lancamentoId: id,
+              tipoDocumentoId: tipoNfObj.id,
+              nomeOriginal: nomeDoc,
+              urlPublica: urlFormatada,
+              caminhoOriginal: null,
+              tamanhoBytes: 0,
+              usuarioResponsavel: 'Edição de lançamento',
+            },
+          });
+          changes.push(`Link da Nota Fiscal adicionado`);
+        }
+      } else if (existingNfDoc && existingNfDoc.urlPublica && !existingNfDoc.caminhoOriginal) {
+        await db.documento.delete({ where: { id: existingNfDoc.id } });
+        changes.push(`Link da Nota Fiscal removido`);
+      }
+    }
+
     if (changes.length > 0) {
       await db.historicoLancamento.create({
         data: {
@@ -468,9 +536,9 @@ export async function deleteLancamento(id: string) {
       return { success: false, error: 'Lançamento não encontrado.' };
     }
 
-    // Excluir arquivos associados do Google Drive
+    // Excluir arquivos associados do Google Drive de forma resiliente
     if (lancamento.documentos && lancamento.documentos.length > 0) {
-      await Promise.all(
+      await Promise.allSettled(
         lancamento.documentos
           .filter(doc => doc.caminhoOriginal)
           .map(doc => deleteFromGoogleDrive(doc.caminhoOriginal!))
@@ -497,11 +565,12 @@ export async function sincronizarDocumentosPI() {
 
     for (const l of lancamentos) {
       const piKey = l.numeroPi ? `PI_${l.numeroPi.trim().toLowerCase()}` : null;
+      const contratoKey = l.numeroContrato ? `CTR_${l.numeroContrato.trim().toLowerCase()}` : null;
       const appSheetKey = l.appSheetId && l.appSheetId.includes('-') 
         ? `APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
         : null;
 
-      const groupKey = piKey || appSheetKey;
+      const groupKey = piKey || contratoKey || appSheetKey;
       if (!groupKey) continue;
 
       if (!piGroups.has(groupKey)) {

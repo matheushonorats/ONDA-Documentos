@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { LancamentosTable } from './LancamentosTable';
 import { SearchInput } from '@/components/SearchInput';
+import { VeiculoFilterSelect } from '@/components/VeiculoFilterSelect';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,26 +165,7 @@ export default async function LancamentosList({
           </div>
 
           {/* Vehicle Dropdown */}
-          <div className="w-full sm:w-64">
-            <label htmlFor="veiculo-filter" className="sr-only">Filtrar por Veículo</label>
-            <div className="relative">
-              <select
-                id="veiculo-filter"
-                value={veiculoFilter}
-                onChange={(e) => {
-                  window.location.href = buildUrl({ veiculo: e.target.value, p: 1 });
-                }}
-                className="w-full rounded-xl border border-slate-300 bg-white py-3 px-4 text-xs sm:text-sm font-bold text-slate-700 focus:border-indigo-500 focus:ring-indigo-500 shadow-xs"
-              >
-                <option value="TODOS">📻 Todos os Veículos / Rádios</option>
-                {veiculos.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <VeiculoFilterSelect veiculos={veiculos} currentValue={veiculoFilter} />
         </div>
 
         {/* Tier 3: Document Status Quick Pills */}

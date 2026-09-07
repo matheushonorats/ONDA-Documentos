@@ -21,6 +21,7 @@ function SearchInputContent({ placeholder = "Pesquisar..." }: { placeholder?: st
       } else {
         params.delete('q');
       }
+      params.delete('p'); // Reseta a página para a 1ª ao pesquisar
       router.push(`?${params.toString()}`);
     }, 500);
 

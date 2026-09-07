@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lancamento } from '@/generated/prisma';
-import { ArrowLeft, Save, Edit3, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Edit3, Loader2, Trash2, Link as LinkIcon, ExternalLink, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
 import { updateLancamento, deleteLancamento } from '@/actions/lancamentos';
 
@@ -13,12 +13,23 @@ interface EditProps {
   veiculos: { id: string; nome: string }[];
   clientes: { id: string; razaoSocial: string; nomeFantasia: string | null }[];
   colaboradores: { id: string; nome: string }[];
+  initialUrlNotaFiscal?: string;
+  documentosCount?: number;
 }
 
-export function EditLancamentoClient({ lancamento, agencias, veiculos, clientes, colaboradores }: EditProps) {
+export function EditLancamentoClient({
+  lancamento,
+  agencias,
+  veiculos,
+  clientes,
+  colaboradores,
+  initialUrlNotaFiscal = '',
+  documentosCount = 0,
+}: EditProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [urlNotaFiscal, setUrlNotaFiscal] = useState(initialUrlNotaFiscal);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -166,8 +177,57 @@ export function EditLancamentoClient({ lancamento, agencias, veiculos, clientes,
             </div>
 
             <div className="space-y-2 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                  <LinkIcon className="w-4 h-4 text-indigo-600" />
+                  Link / URL da Nota Fiscal Emitida (Opcional)
+                </label>
+                {urlNotaFiscal && (
+                  <a
+                    href={urlNotaFiscal.startsWith('http') ? urlNotaFiscal : `https://${urlNotaFiscal}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                  >
+                    Testar link <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              <input
+                type="text"
+                name="urlNotaFiscal"
+                value={urlNotaFiscal}
+                onChange={(e) => setUrlNotaFiscal(e.target.value)}
+                placeholder="Ex: https://nfe.prefeitura.sp.gov.br/publico/verificacao?..."
+                className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 text-sm"
+              />
+              <p className="text-xs text-slate-500">
+                Endereço web de verificação da Nota Fiscal na prefeitura. Ao salvar, é sincronizado automaticamente neste lançamento.
+              </p>
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
               <label className="block text-sm font-medium text-slate-700">Descrição</label>
               <textarea name="descricao" rows={3} defaultValue={lancamento.descricao || ''} className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-slate-900"></textarea>
+            </div>
+
+            {/* Atalho para Acervo Documental */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 sm:col-span-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="text-xs text-slate-600">
+                <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <UploadCloud className="w-4 h-4 text-indigo-600" />
+                  Anexos e Documentos Vinculados
+                </p>
+                <p className="mt-0.5">
+                  Este lançamento possui <strong>{documentosCount} documento(s)</strong> anexado(s) entre arquivos e links.
+                </p>
+              </div>
+              <Link
+                href={`/novo-documento?lancamento=${lancamento.id}`}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors shrink-0"
+              >
+                + Gerenciar / Anexar Arquivos
+              </Link>
             </div>
           </div>
 

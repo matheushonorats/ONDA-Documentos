@@ -18,6 +18,11 @@ export default async function EditLancamentoPage(props: { params: Promise<{ id: 
 
   if (!lancamento) notFound();
 
+  const existingNfDoc = lancamento.documentos?.find(
+    (d) => (d.urlPublica && !d.caminhoOriginal) || d.tipoDocumento?.nome?.toLowerCase().includes('nota')
+  );
+  const existingNfUrl = existingNfDoc?.urlPublica || '';
+
   return (
     <EditLancamentoClient 
       lancamento={lancamento} 
@@ -25,6 +30,8 @@ export default async function EditLancamentoPage(props: { params: Promise<{ id: 
       veiculos={veiculos}
       clientes={clientes}
       colaboradores={colaboradores}
+      initialUrlNotaFiscal={existingNfUrl}
+      documentosCount={lancamento.documentos?.length || 0}
     />
   );
 }

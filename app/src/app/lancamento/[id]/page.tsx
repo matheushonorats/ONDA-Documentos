@@ -47,11 +47,21 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
 
   if (!lancamento) notFound();
 
-  // Parcelas do mesmo PI ou Contrato
-  const parcelas = lancamento.numeroPi
+  // Parcelas do mesmo PI, Contrato ou Lote Comercial
+  let parcelasWhere: Record<string, any> | null = null;
+  if (lancamento.numeroPi) {
+    parcelasWhere = { numeroPi: lancamento.numeroPi };
+  } else if (lancamento.numeroContrato) {
+    parcelasWhere = { numeroContrato: lancamento.numeroContrato };
+  } else if (lancamento.appSheetId && lancamento.appSheetId.includes('-')) {
+    const prefix = lancamento.appSheetId.split('-').slice(0, -1).join('-');
+    parcelasWhere = { appSheetId: { startsWith: prefix } };
+  }
+
+  const parcelas = parcelasWhere
     ? await db.lancamento.findMany({
-        where: { numeroPi: lancamento.numeroPi },
-        orderBy: { vencimento: 'asc' },
+        where: parcelasWhere,
+        orderBy: [{ vencimento: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true,
           valor: true,
@@ -291,7 +301,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-100 bg-linear-to-r from-indigo-50/80 to-white px-6 py-4 sm:px-8">
             <div>
               <h2 className="flex items-center gap-2 text-base sm:text-lg font-black text-indigo-950">
-                <Layers className="h-5 w-5 text-indigo-600" /> Grade de Parcelas do PI ({lancamento.numeroPi})
+                <Layers className="h-5 w-5 text-indigo-600" /> Grade de Parcelas {lancamento.numeroPi ? `do PI (${lancamento.numeroPi})` : lancamento.numeroContrato ? `do Contrato (${lancamento.numeroContrato})` : 'da Campanha'}
               </h2>
               <p className="text-xs text-indigo-700 mt-0.5">
                 Campanha parcelada em <strong>{parcelas.length} vezes</strong>. Clique em qualquer parcela para inspecionar ou anexar sua NF específica.
