@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X,
   Copy,
@@ -36,26 +36,51 @@ export function EmailPreviewModal({
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [copiedSubject, setCopiedSubject] = useState(false);
 
+  // Fecha o modal ao pressionar a tecla Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !grupo) return null;
 
   const emailData = buildEmailData(grupo, modoTeste);
 
+  async function safeCopy(text: string, setSuccess: (val: boolean) => void) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err) {
+      console.error('Falha ao copiar conteúdo:', err);
+    }
+  }
+
   async function handleCopyText() {
-    await navigator.clipboard.writeText(emailData.texto);
-    setCopiedText(true);
-    setTimeout(() => setCopiedText(false), 2000);
+    await safeCopy(emailData.texto, setCopiedText);
   }
 
   async function handleCopyHtml() {
-    await navigator.clipboard.writeText(emailData.html);
-    setCopiedHtml(true);
-    setTimeout(() => setCopiedHtml(false), 2000);
+    await safeCopy(emailData.html, setCopiedHtml);
   }
 
   async function handleCopySubject() {
-    await navigator.clipboard.writeText(emailData.assunto);
-    setCopiedSubject(true);
-    setTimeout(() => setCopiedSubject(false), 2000);
+    await safeCopy(emailData.assunto, setCopiedSubject);
   }
 
   return (

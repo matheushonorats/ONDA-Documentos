@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { X, Printer, ShieldCheck, Building2, CheckCircle2, AlertTriangle, FileSpreadsheet, Mail } from 'lucide-react';
 import Image from 'next/image';
 import { CobrancasDataResponse, FINANCEIRO_EMAIL } from '@/lib/cobrancasTypes';
@@ -11,6 +12,18 @@ interface RelatorioGeralModalProps {
 }
 
 export function RelatorioGeralModal({ isOpen, onClose, data }: RelatorioGeralModalProps) {
+  // Fecha o modal ao pressionar a tecla Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const { metrics, agenciasGrupos, todosContratos } = data;
@@ -171,7 +184,7 @@ export function RelatorioGeralModal({ isOpen, onClose, data }: RelatorioGeralMod
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {agenciasGrupos.map((grupo, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
+                      <tr key={idx} className="hover:bg-slate-50/50" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                         <td className="px-3 py-2.5 font-bold text-slate-900">
                           {grupo.agencia}
                           <div className="text-[10px] font-mono text-slate-400 font-normal">
@@ -199,7 +212,7 @@ export function RelatorioGeralModal({ isOpen, onClose, data }: RelatorioGeralMod
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-slate-900">
+                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-slate-900" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                       <td colSpan={5} className="px-3 py-3 text-right uppercase tracking-wider text-[11px]">
                         Total Geral em Atraso Notificado:
                       </td>

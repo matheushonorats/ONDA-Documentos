@@ -129,11 +129,66 @@ export function parseCSV(csvText: string): string[][] {
 }
 
 /**
- * Converte valor em formato monetário brasileiro ("R$ 1.680,00" ou "1.680,00") para número float.
+ * Obtém a data de hoje normalizada à meia-noite no fuso de Brasília (America/Sao_Paulo),
+ * prevenindo bugs de descompasso de data quando rodando em servidores UTC (Vercel, Docker).
+ */
+export function getBrasiliaToday(): Date {
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const day = parseInt(parts.find((p) => p.type === 'day')!.value, 10);
+  const month = parseInt(parts.find((p) => p.type === 'month')!.value, 10) - 1;
+  const year = parseInt(parts.find((p) => p.type === 'year')!.value, 10);
+  return new Date(year, month, day, 0, 0, 0, 0);
+}
+
+/**
+ * Converte valor monetário com segurança tanto para padrão brasileiro ("R$ 1.680,00", "343,20")
+ * quanto para padrão decimal internacional/float ("1200.50", "1680"), evitando multiplicação 100x por remoção cega de pontos.
  */
 export function parseCurrency(valStr: string | null | undefined): number {
   if (!valStr) return 0;
-  const cleaned = valStr.replace(/[R$\s.]/g, '').replace(',', '.');
+  const cleaned = valStr.replace(/[R$\s]/g, '').trim();
+  if (!cleaned) return 0;
+
+  // Se contiver ponto e vírgula (ex: "1.680,00" ou "1,680.00")
+  if (cleaned.includes('.') && cleaned.includes(',')) {
+    const lastDot = cleaned.lastIndexOf('.');
+    const lastComma = cleaned.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      // Formato brasileiro: 1.680,00 -> remove ponto de milhar, substitui vírgula por ponto decimal
+      const num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+      return isNaN(num) ? 0 : num;
+    } else {
+      // Formato americano: 1,680.00 -> remove vírgula de milhar
+      const num = parseFloat(cleaned.replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+  }
+
+  // Se contiver apenas vírgula (ex: "1680,00" ou "343,20")
+  if (cleaned.includes(',')) {
+    const num = parseFloat(cleaned.replace(',', '.'));
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Se contiver apenas ponto:
+  if (cleaned.includes('.')) {
+    const parts = cleaned.split('.');
+    // Caso especial pt-BR sem vírgula onde ponto é milhar exato (ex: "1.680" ou "10.000")
+    if (parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3) {
+      const num = parseFloat(cleaned.replace(/\./g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+    // Caso padrão decimal: "1200.50", "1200.5", etc.
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
@@ -146,19 +201,41 @@ export function formatCurrency(val: number): string {
 }
 
 /**
- * Converte string DD/MM/YYYY em objeto Date à meia-noite local.
+ * Converte string DD/MM/YYYY, DD/MM/YY ou YYYY-MM-DD em objeto Date à meia-noite.
  */
 export function parseBrazilianDate(dateStr: string | null | undefined): Date | null {
   if (!dateStr || !dateStr.trim()) return null;
-  const parts = dateStr.trim().split('/');
-  if (parts.length === 3) {
-    const d = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const y = parseInt(parts[2], 10);
-    if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
-      return new Date(y, m, d, 0, 0, 0, 0);
+  const clean = dateStr.trim();
+
+  // Formato ISO: YYYY-MM-DD
+  if (clean.includes('-')) {
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        return new Date(y, m, d, 0, 0, 0, 0);
+      }
     }
   }
+
+  // Formato Brasileiro: DD/MM/YYYY ou DD/MM/YY
+  if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      let y = parseInt(parts[2], 10);
+      if (y < 100) {
+        y += 2000;
+      }
+      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+        return new Date(y, m, d, 0, 0, 0, 0);
+      }
+    }
+  }
+
   return null;
 }
 
@@ -184,7 +261,7 @@ export function extractEmails(emailField: string | null | undefined): string[] {
 export function calculateDaysOverdue(vencimentoDate: Date | null, hojeDate: Date): number {
   if (!vencimentoDate) return 0;
   const diffMs = hojeDate.getTime() - vencimentoDate.getTime();
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
   return Math.max(0, days);
 }
 
@@ -338,15 +415,17 @@ Rádios Litoral FM & Onda Livre FM`;
   const destinatarios = modoTeste ? [FINANCEIRO_EMAIL] : grupo.emails;
   const bcc = modoTeste ? '' : FINANCEIRO_EMAIL;
 
-  const mailtoDest = destinatarios.join(',');
-  const params = new URLSearchParams();
-  params.set('subject', assunto);
-  params.set('body', texto);
+  // RFC 6068: no esquema mailto:, espaços DEVEM ser %20 (nunca +), e quebras de linha %0D%0A (\r\n)
+  const queryParts: string[] = [];
+  queryParts.push(`subject=${encodeURIComponent(assunto)}`);
   if (bcc) {
-    params.set('bcc', bcc);
+    queryParts.push(`bcc=${encodeURIComponent(bcc)}`);
   }
+  const crlfBody = texto.replace(/\r?\n/g, '\r\n');
+  queryParts.push(`body=${encodeURIComponent(crlfBody)}`);
 
-  const mailtoUrl = `mailto:${encodeURIComponent(mailtoDest).replace(/%40/g, '@').replace(/%2C/g, ',')}?${params.toString()}`;
+  const mailtoDest = destinatarios.join(',');
+  const mailtoUrl = `mailto:${mailtoDest}?${queryParts.join('&')}`;
 
   return {
     assunto,

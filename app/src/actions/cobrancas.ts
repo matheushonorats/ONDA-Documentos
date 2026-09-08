@@ -15,6 +15,7 @@ import {
   extractEmails,
   calculateDaysOverdue,
   buildEmailData,
+  getBrasiliaToday,
 } from '@/lib/cobrancasTypes';
 
 // Re-exportação de tipos para conveniência no servidor
@@ -34,7 +35,7 @@ export type {
 export async function getCobrancasData(bypassCache = false): Promise<CobrancasDataResponse> {
   const fetchOptions: RequestInit = bypassCache
     ? { cache: 'no-store' }
-    : { next: { revalidate: 300, tags: ['cobrancas-sheet'] } };
+    : { next: { revalidate: 300 } };
 
   const res = await fetch(SPREADSHEET_CSV_URL, fetchOptions);
 
@@ -85,8 +86,7 @@ export async function getCobrancasData(bypassCache = false): Promise<CobrancasDa
   const colObs = getCol('obs', 10);
   const colPago = getCol('pago', 11);
 
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+  const hoje = getBrasiliaToday();
 
   let totalPago = 0;
   let totalVencido = 0;
@@ -117,6 +117,7 @@ export async function getCobrancasData(bypassCache = false): Promise<CobrancasDa
 
     const valor = parseCurrency(valorStr);
     const isPago = pagoStr === 'TRUE';
+    const hasNovaData = Boolean(novaData && novaData.trim());
     const dataVencEfetivaStr = novaData || dataExpirada;
     const vencimentoDate = parseBrazilianDate(dataVencEfetivaStr);
 
@@ -134,8 +135,10 @@ export async function getCobrancasData(bypassCache = false): Promise<CobrancasDa
         totalVencido += valor;
         diasAtraso = calculateDaysOverdue(vencimentoDate, hoje);
 
-        // Regra do script: elegível para agrupamento de cobrança se tiver PI, Agência e E-mail
-        if (agencia && pi && emailStr) {
+        // Regra do Google Apps Script: elegível para notificação semanal se:
+        // 1. Possui novaData (vencimento configurado) e dataVenc <= hoje
+        // 2. Possui PI, Agência e E-mail
+        if (hasNovaData && agencia && pi && emailStr) {
           if (!mapAgenciasVencidas.has(agencia)) {
             mapAgenciasVencidas.set(agencia, {
               agencyName: agencia,
@@ -238,7 +241,19 @@ export async function getCobrancasData(bypassCache = false): Promise<CobrancasDa
  * Força a revalidação do cache da planilha Next.js e da página de cobranças.
  */
 export async function revalidateCobrancasCache() {
-  revalidatePath('/cobrancas');
+  try {
+    revalidatePath('/cobrancas');
+  } catch {
+    // Ignora se revalidatePath não estiver disponível no runtime
+  }
+}
+
+/**
+ * Força a sincronização ao vivo sem cache e retorna os dados atualizados imediatamente.
+ */
+export async function refreshCobrancasLive(): Promise<CobrancasDataResponse> {
+  await revalidateCobrancasCache();
+  return getCobrancasData(true);
 }
 
 /**

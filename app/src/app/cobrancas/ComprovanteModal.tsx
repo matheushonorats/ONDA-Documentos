@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { X, Printer, ShieldCheck, Building2, Mail, Calendar, FileText, CheckCircle2 } from 'lucide-react';
 import { AgenciaGrupo, EmailGerado, FINANCEIRO_EMAIL } from '@/lib/cobrancasTypes';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
@@ -13,6 +14,18 @@ interface ComprovanteModalProps {
 }
 
 export function ComprovanteModal({ isOpen, onClose, grupo, email }: ComprovanteModalProps) {
+  // Fecha o modal ao pressionar a tecla Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !grupo) return null;
 
   const dataHoraEmissao = new Date().toLocaleString('pt-BR', {
@@ -167,7 +180,7 @@ export function ComprovanteModal({ isOpen, onClose, grupo, email }: ComprovanteM
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {grupo.debts.map((d, index) => (
-                      <tr key={index} className="hover:bg-slate-50/50">
+                      <tr key={index} className="hover:bg-slate-50/50" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                         <td className="px-3 py-2.5 font-mono font-bold text-slate-900">
                           {d.pi}
                           {d.cobrancaNo && <span className="text-[10px] text-slate-400 ml-1">(#{d.cobrancaNo})</span>}
@@ -193,7 +206,7 @@ export function ComprovanteModal({ isOpen, onClose, grupo, email }: ComprovanteM
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-slate-900">
+                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-slate-900" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                       <td colSpan={4} className="px-3 py-3 text-right uppercase tracking-wider text-[11px]">
                         Total Consolidado Notificado:
                       </td>

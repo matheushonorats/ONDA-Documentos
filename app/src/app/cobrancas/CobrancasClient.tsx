@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   RefreshCw,
@@ -30,7 +30,7 @@ import {
   SPREADSHEET_URL,
   buildEmailData,
 } from '@/lib/cobrancasTypes';
-import { revalidateCobrancasCache } from '@/actions/cobrancas';
+import { revalidateCobrancasCache, refreshCobrancasLive } from '@/actions/cobrancas';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { ComprovanteModal } from './ComprovanteModal';
@@ -43,6 +43,13 @@ interface CobrancasClientProps {
 export function CobrancasClient({ initialData }: CobrancasClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // Estado reativo dos dados para sincronização instantânea
+  const [data, setData] = useState<CobrancasDataResponse>(initialData);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   // Estados locais
   const [modoTeste, setModoTeste] = useState<boolean>(true);
@@ -58,15 +65,22 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
   // Feedback de cópia
   const [copiedSummaryId, setCopiedSummaryId] = useState<string | null>(null);
 
-  // Ação de Sincronização ao Vivo
+  // Ação de Sincronização ao Vivo com feedback imediato
   function handleSync() {
     startTransition(async () => {
-      await revalidateCobrancasCache();
-      router.refresh();
+      try {
+        const fresh = await refreshCobrancasLive();
+        setData(fresh);
+        router.refresh();
+      } catch (err) {
+        console.error('Erro ao sincronizar planilha:', err);
+        await revalidateCobrancasCache();
+        router.refresh();
+      }
     });
   }
 
-  // Copia resumo de PIs de uma agência
+  // Copia resumo de PIs de uma agência com suporte resiliente a navegadores
   async function handleCopyResumo(grupo: AgenciaGrupo) {
     const lines = [
       `*PENDÊNCIAS - ${grupo.agencia.toUpperCase()}*`,
@@ -77,13 +91,27 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
         (d) => `• PI ${d.pi} (${d.veiculo}): ${d.valorFormatado} - Venc: ${d.dataVenc}${d.diasAtraso > 0 ? ` [${d.diasAtraso}d atraso]` : ''}`
       ),
     ];
-    await navigator.clipboard.writeText(lines.join('\n'));
-    setCopiedSummaryId(grupo.agencia);
-    setTimeout(() => setCopiedSummaryId(null), 2000);
+    const textToCopy = lines.join('\n');
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedSummaryId(grupo.agencia);
+      setTimeout(() => setCopiedSummaryId(null), 2000);
+    } catch (err) {
+      console.error('Falha ao copiar dados:', err);
+    }
   }
 
   // Filtragem de Agências Vencidas
-  const agenciasFiltradas = initialData.agenciasGrupos.filter((grupo) => {
+  const agenciasFiltradas = data.agenciasGrupos.filter((grupo) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -94,7 +122,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
   });
 
   // Filtragem de Todos os Contratos
-  const contratosFiltrados = initialData.todosContratos.filter((contrato) => {
+  const contratosFiltrados = data.todosContratos.filter((contrato) => {
     const matchesStatus = statusFilter === 'TODOS' ? true : contrato.status === statusFilter;
     if (!matchesStatus) return false;
 
@@ -109,7 +137,12 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
     );
   });
 
-  const { metrics } = initialData;
+  const { metrics, ultimaAtualizacao } = data;
+  const horaSincronizacao = new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 
   return (
     <div className="space-y-8">
@@ -123,7 +156,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Planilha Conectada ao Vivo
+                Planilha Conectada ao Vivo • Atualizado às {horaSincronizacao}
               </span>
             </div>
 
@@ -320,7 +353,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                   activeTab === 'vencidas' ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200 text-slate-700'
                 }`}
               >
-                {initialData.agenciasGrupos.length}
+                {data.agenciasGrupos.length}
               </span>
             </button>
 
@@ -340,7 +373,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                   activeTab === 'todos' ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200 text-slate-700'
                 }`}
               >
-                {initialData.todosContratos.length}
+                {data.todosContratos.length}
               </span>
             </button>
           </div>
@@ -575,7 +608,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                Todos ({initialData.todosContratos.length})
+                Todos ({data.todosContratos.length})
               </button>
 
               <button
@@ -587,7 +620,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                     : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
                 }`}
               >
-                Vencidos ({initialData.todosContratos.filter((c) => c.status === 'VENCIDO').length})
+                Vencidos ({data.todosContratos.filter((c) => c.status === 'VENCIDO').length})
               </button>
 
               <button
@@ -599,7 +632,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                     : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
                 }`}
               >
-                A Vencer ({initialData.todosContratos.filter((c) => c.status === 'A_VENCER').length})
+                A Vencer ({data.todosContratos.filter((c) => c.status === 'A_VENCER').length})
               </button>
 
               <button
@@ -611,7 +644,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 }`}
               >
-                Pagos / Baixados ({initialData.todosContratos.filter((c) => c.status === 'PAGO').length})
+                Pagos / Baixados ({data.todosContratos.filter((c) => c.status === 'PAGO').length})
               </button>
             </div>
 
@@ -736,7 +769,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
       <RelatorioGeralModal
         isOpen={isRelatorioGeralOpen}
         onClose={() => setIsRelatorioGeralOpen(false)}
-        data={initialData}
+        data={data}
       />
     </div>
   );
