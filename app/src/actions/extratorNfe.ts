@@ -62,6 +62,37 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
     }
 
     // Leitura do texto do PDF usando pdf-parse
+    // Polyfill: DOMMatrix nao existe no Node.js/Vercel (usado internamente pelo pdf-parse)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof globalThis.DOMMatrix === 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).DOMMatrix = class DOMMatrix {
+        a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+        m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+        m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+        m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+        m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+        is2D = true;
+        isIdentity = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        constructor(_init?: any) {}
+        translate(_x = 0, _y = 0) { return this; }
+        scale(_x = 1, _y = 1) { return this; }
+        invertSelf() { return this; }
+        multiplySelf() { return this; }
+        preMultiplySelf() { return this; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        transformPoint(p: any) { return p; }
+      };
+    }
+    if (typeof globalThis.Path2D === 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).Path2D = class Path2D {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        addPath(_path?: any, _transform?: any) {}
+        rect(_x = 0, _y = 0, _w = 0, _h = 0) {}
+      };
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PDFParse } = require('pdf-parse');
     const parser = new PDFParse({ data: buffer });

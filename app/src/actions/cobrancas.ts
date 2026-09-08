@@ -17,6 +17,13 @@ import {
   buildEmailData,
   getBrasiliaToday,
 } from '@/lib/cobrancasTypes';
+import {
+  COLS,
+  findRowByCobrancaNo,
+  updateCell,
+  appendRow,
+  getNextCobrancaNo,
+} from '@/lib/gsheets';
 
 // Re-exportação de tipos para conveniência no servidor
 export type {
@@ -265,3 +272,132 @@ export async function generateEmailForAgencia(
 ): Promise<EmailGerado> {
   return buildEmailData(grupo, modoTeste);
 }
+
+export interface NovaCobrancaInput {
+  pi: string;
+  veiculo: string;
+  agencia: string;
+  valor: string | number;
+  dataVencimento: string; // DD/MM/YYYY
+  email: string;
+  obs?: string;
+  link?: string;
+}
+
+/**
+ * Marca um contrato como PAGO na planilha Google Sheets.
+ */
+export async function marcarComoPago(
+  cobrancaNo: string,
+  pi: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.PAGO, 'TRUE');
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao marcar como pago:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Desmarca um contrato como PAGO (volta a ser pendente) na planilha Google Sheets.
+ */
+export async function desmarcarPago(
+  cobrancaNo: string,
+  pi: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.PAGO, 'FALSE');
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao desmarcar pago:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Atualiza a Nova Data de vencimento de um contrato na planilha Google Sheets.
+ */
+export async function atualizarNovaData(
+  cobrancaNo: string,
+  pi: string,
+  novaData: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.NOVA_DATA, novaData.trim());
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar nova data:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Atualiza a observação de um contrato na planilha Google Sheets.
+ */
+export async function atualizarObs(
+  cobrancaNo: string,
+  pi: string,
+  obs: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.OBS, obs.trim());
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar observação:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Adiciona uma nova cobrança como nova linha na planilha Google Sheets.
+ */
+export async function adicionarCobranca(
+  dados: NovaCobrancaInput
+): Promise<{ success: boolean; error?: string; cobrancaNo?: string }> {
+  try {
+    const proximoNumero = await getNextCobrancaNo();
+    const rowValues = [
+      proximoNumero,
+      dados.pi.trim(),
+      dados.veiculo.trim(),
+      dados.agencia.trim(),
+      typeof dados.valor === 'number' ? dados.valor.toFixed(2).replace('.', ',') : dados.valor.trim(),
+      dados.dataVencimento.trim(),
+      dados.email.trim(),
+      '',
+      dados.link?.trim() || '',
+      dados.dataVencimento.trim(),
+      dados.obs?.trim() || '',
+      'FALSE',
+    ];
+    await appendRow(rowValues);
+    await revalidateCobrancasCache();
+    return { success: true, cobrancaNo: proximoNumero };
+  } catch (error: any) {
+    console.error('Erro ao adicionar cobrança:', error);
+    return { success: false, error: error?.message || 'Erro ao adicionar linha na planilha.' };
+  }
+}
+

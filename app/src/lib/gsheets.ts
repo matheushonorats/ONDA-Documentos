@@ -70,7 +70,7 @@ export async function updateCell(rowNumber: number, colIndex: number, value: str
   const col = colIndexToLetter(colIndex);
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: ${col},
+    range: col + rowNumber.toString(),
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[value]] },
   });

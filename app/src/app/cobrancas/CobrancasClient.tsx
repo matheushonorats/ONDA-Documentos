@@ -22,6 +22,11 @@ import {
   Layers,
   ArrowUpDown,
   Filter,
+  PlusCircle,
+  Calendar,
+  MessageSquare,
+  Loader2,
+  Undo2,
 } from 'lucide-react';
 import {
   CobrancasDataResponse,
@@ -30,11 +35,19 @@ import {
   SPREADSHEET_URL,
   buildEmailData,
 } from '@/lib/cobrancasTypes';
-import { revalidateCobrancasCache, refreshCobrancasLive } from '@/actions/cobrancas';
+import {
+  revalidateCobrancasCache,
+  refreshCobrancasLive,
+  marcarComoPago,
+  desmarcarPago,
+  atualizarNovaData,
+  atualizarObs,
+} from '@/actions/cobrancas';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { ComprovanteModal } from './ComprovanteModal';
 import { RelatorioGeralModal } from './RelatorioGeralModal';
+import { NovaCobrancaModal } from './NovaCobrancaModal';
 
 interface CobrancasClientProps {
   initialData: CobrancasDataResponse;
@@ -61,6 +74,10 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
   const [emailModalAgency, setEmailModalAgency] = useState<AgenciaGrupo | null>(null);
   const [comprovanteModalAgency, setComprovanteModalAgency] = useState<AgenciaGrupo | null>(null);
   const [isRelatorioGeralOpen, setIsRelatorioGeralOpen] = useState<boolean>(false);
+  const [isNovaCobrancaOpen, setIsNovaCobrancaOpen] = useState<boolean>(false);
+
+  // Controle de loading de operações em linhas
+  const [updatingKey, setUpdatingKey] = useState<string | null>(null);
 
   // Feedback de cópia
   const [copiedSummaryId, setCopiedSummaryId] = useState<string | null>(null);
@@ -78,6 +95,83 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
         router.refresh();
       }
     });
+  }
+
+  // Marcar ou Desmarcar Pago diretamente na planilha
+  async function handleTogglePago(item: ContratoCompleto) {
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      if (item.pago) {
+        await desmarcarPago(item.cobrancaNo, item.pi);
+      } else {
+        await marcarComoPago(item.cobrancaNo, item.pi);
+      }
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao alterar status de pagamento:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
+  // Marcar todos os débitos de uma agência como pagos
+  async function handleMarcarAgenciaTodaPaga(grupo: AgenciaGrupo) {
+    if (
+      !confirm(
+        `Confirma marcar como PAGO todos os ${grupo.quantidadeContratos} contratos de ${grupo.agencia} na planilha?`
+      )
+    ) {
+      return;
+    }
+    setUpdatingKey(grupo.agencia);
+    try {
+      for (const debt of grupo.debts) {
+        await marcarComoPago(debt.cobrancaNo, debt.pi);
+      }
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao marcar agência como paga:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
+  // Atualizar Nova Data de Vencimento
+  async function handleEditNovaData(item: ContratoCompleto) {
+    const nova = prompt(
+      `Informe a nova data de vencimento (DD/MM/AAAA) para o PI ${item.pi}:`,
+      item.novaData || item.dataVencEfetiva
+    );
+    if (!nova || nova.trim() === item.novaData) return;
+
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      await atualizarNovaData(item.cobrancaNo, item.pi, nova.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar nova data:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
+  // Atualizar Observação
+  async function handleEditObs(item: ContratoCompleto) {
+    const novaObs = prompt(`Observação para o PI ${item.pi}:`, item.obs || '');
+    if (novaObs === null || novaObs === item.obs) return;
+
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      await atualizarObs(item.cobrancaNo, item.pi, novaObs.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar observação:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
   }
 
   // Copia resumo de PIs de uma agência com suporte resiliente a navegadores
@@ -201,6 +295,17 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                 </div>
               </label>
             </div>
+
+            {/* Nova Cobrança Button */}
+            <button
+              type="button"
+              onClick={() => setIsNovaCobrancaOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-500 hover:bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white transition active:scale-95 cursor-pointer shadow-md"
+              title="Adicionar uma nova cobrança diretamente na planilha"
+            >
+              <PlusCircle className="h-4 w-4" />
+              Nova Cobrança
+            </button>
 
             {/* Sincronizar Button */}
             <button
@@ -510,20 +615,51 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                                   {debt.valorFormatado}
                                 </td>
                                 <td className="px-3.5 py-2.5 text-center">
-                                  {debt.link ? (
-                                    <a
-                                      href={debt.link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
-                                      title="Abrir link cadastrado na planilha (Webmail / NF)"
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePago({
+                                        cobrancaNo: debt.cobrancaNo,
+                                        pi: debt.pi,
+                                        veiculo: debt.veiculo,
+                                        agencia: grupo.agencia,
+                                        valor: debt.valor,
+                                        valorFormatado: debt.valorFormatado,
+                                        dataExpirada: debt.dataOriginal,
+                                        novaData: debt.dataVenc,
+                                        dataVencEfetiva: debt.dataVenc,
+                                        email: grupo.emailsFormatados,
+                                        ultCobranca: debt.ultCobranca,
+                                        link: debt.link,
+                                        obs: debt.obs,
+                                        pago: false,
+                                        status: 'VENCIDO',
+                                        diasAtraso: debt.diasAtraso,
+                                      })}
+                                      disabled={updatingKey === `${debt.cobrancaNo}-${debt.pi}`}
+                                      className="inline-flex items-center gap-1 rounded-md bg-emerald-600 hover:bg-emerald-700 px-2 py-0.5 text-[10px] font-bold text-white shadow-2xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                                      title="Marcar este contrato como PAGO na planilha"
                                     >
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                      Link
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-300">—</span>
-                                  )}
+                                      {updatingKey === `${debt.cobrancaNo}-${debt.pi}` ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                      Pagar
+                                    </button>
+
+                                    {debt.link ? (
+                                      <a
+                                        href={debt.link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-0.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800"
+                                        title="Abrir link cadastrado na planilha (Webmail / NF)"
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    ) : null}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -534,6 +670,22 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                       {/* Card Action Buttons */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                         <div className="flex flex-wrap items-center gap-2">
+                          {/* Botão Baixar Todos como Pagos */}
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarAgenciaTodaPaga(grupo)}
+                            disabled={updatingKey === grupo.agencia}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-2.5 text-xs font-bold text-emerald-800 shadow-2xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                            title="Marca todos os débitos desta agência como pagos na planilha"
+                          >
+                            {updatingKey === grupo.agencia ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            )}
+                            Baixar Todos (Pagos)
+                          </button>
+
                           {/* Botão Principal: Ver E-mail */}
                           <button
                             type="button"
@@ -663,17 +815,21 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                     <th className="px-3.5 py-3">E-mail</th>
                     <th className="px-3.5 py-3">Últ. Cobrança</th>
                     <th className="px-3.5 py-3 text-center">Link</th>
+                    <th className="px-3.5 py-3 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {contratosFiltrados.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                         Nenhum registro encontrado com os filtros atuais.
                       </td>
                     </tr>
                   ) : (
                     contratosFiltrados.map((item, index) => {
+                      const rowKey = `${item.cobrancaNo}-${item.pi}`;
+                      const isRowUpdating = updatingKey === rowKey;
+
                       return (
                         <tr key={index} className="hover:bg-slate-50/70 transition-colors">
                           <td className="px-3.5 py-2.5 font-mono text-slate-400">
@@ -694,7 +850,18 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                             {item.valorFormatado}
                           </td>
                           <td className="px-3.5 py-2.5 text-slate-600">
-                            {item.dataVencEfetiva || '—'}
+                            <div className="flex items-center gap-1">
+                              <span>{item.dataVencEfetiva || '—'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleEditNovaData(item)}
+                                disabled={isRowUpdating}
+                                className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition"
+                                title="Alterar nova data de vencimento"
+                              >
+                                <Calendar className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3.5 py-2.5 text-center">
                             {item.status === 'PAGO' && (
@@ -734,6 +901,47 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
+                          <td className="px-3.5 py-2.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {/* Botão Marcar/Desmarcar Pago */}
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePago(item)}
+                                disabled={isRowUpdating}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold transition cursor-pointer disabled:opacity-50 ${
+                                  item.pago
+                                    ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs'
+                                }`}
+                                title={item.pago ? 'Voltar para pendente na planilha' : 'Marcar como PAGO na planilha'}
+                              >
+                                {isRowUpdating ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : item.pago ? (
+                                  <>
+                                    <Undo2 className="h-3 w-3" /> Desmarcar
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-3 w-3" /> Pagar
+                                  </>
+                                )}
+                              </button>
+
+                              {/* Botão Observação */}
+                              <button
+                                type="button"
+                                onClick={() => handleEditObs(item)}
+                                disabled={isRowUpdating}
+                                className={`p-1 rounded transition ${
+                                  item.obs ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                                }`}
+                                title={item.obs ? `Observação: ${item.obs}` : 'Adicionar observação na planilha'}
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })
@@ -770,6 +978,15 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
         isOpen={isRelatorioGeralOpen}
         onClose={() => setIsRelatorioGeralOpen(false)}
         data={data}
+      />
+
+      {/* Modal 4: Nova Cobrança direta no Google Sheets */}
+      <NovaCobrancaModal
+        isOpen={isNovaCobrancaOpen}
+        onClose={() => setIsNovaCobrancaOpen(false)}
+        onSuccess={() => {
+          handleSync();
+        }}
       />
     </div>
   );
