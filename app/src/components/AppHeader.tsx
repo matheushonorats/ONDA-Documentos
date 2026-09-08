@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Menu, X, PlusCircle, UploadCloud, ChevronDown, Radio, Layers, Wallet, Users, Building2, ListChecks } from 'lucide-react';
+import { Menu, X, PlusCircle, UploadCloud, ChevronDown, Radio, Layers, Wallet, Users, Building2, ListChecks, FileSpreadsheet } from 'lucide-react';
 import { useState, useRef, useEffect, Suspense } from 'react';
 
 function AppHeaderContent() {
@@ -29,6 +29,7 @@ function AppHeaderContent() {
   const isReceberActive = pathname === '/lancamentos' && tipoParam === 'RECEITA';
   const isPagarActive = (pathname === '/lancamentos' && tipoParam === 'DESPESA') || pathname === '/pagar/novo';
   const isTodosActive = pathname === '/lancamentos' && (tipoParam === 'TODOS' || !tipoParam);
+  const isCobrancasActive = pathname.startsWith('/cobrancas');
   const isCadastrosActive = pathname.startsWith('/clientes') || pathname.startsWith('/colaboradores') || pathname.startsWith('/agencias');
 
   const navItemClass = (active: boolean) =>
@@ -77,6 +78,11 @@ function AppHeaderContent() {
             <Link href="/lancamentos?tipo=TODOS" className={navItemClass(isTodosActive)}>
               <ListChecks className="h-4 w-4 text-slate-400" />
               Todos os Lançamentos
+            </Link>
+
+            <Link href="/cobrancas" className={navItemClass(isCobrancasActive)}>
+              <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
+              Cobranças
             </Link>
 
             {/* Dropdown Cadastros */}
@@ -206,6 +212,19 @@ function AppHeaderContent() {
               }`}
             >
               Todos os Lançamentos
+            </Link>
+
+            <Link
+              href="/cobrancas"
+              onClick={() => setOpen(false)}
+              className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-bold ${
+                isCobrancasActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
+                Cobrança de Agências
+              </span>
             </Link>
 
             <div className="pt-2 pb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">

@@ -268,6 +268,32 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Destaque Módulo de Cobrança de Agências */}
+      <section className="relative overflow-hidden rounded-2xl border border-indigo-200/80 bg-linear-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-lg">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-black text-amber-300 ring-1 ring-amber-400/30">
+                ⚡ Planilha Google Sheets Integrada
+              </span>
+              <span className="text-xs text-slate-400 font-medium">Cobrança Semanal Ondas 985</span>
+            </div>
+            <h3 className="text-lg font-black text-white">
+              Cobrança de Agências &amp; Relatórios para a Diretoria
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+              Consolidação automática das autorizações de mídia (PIs) vencidas, geração de e-mails formais e relatórios timbrados para auditoria da Diretoria em PDF.
+            </p>
+          </div>
+          <Link
+            href="/cobrancas"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-3 text-xs font-bold text-white shadow-md transition active:scale-95 shrink-0 self-start md:self-auto"
+          >
+            Abrir Cobranças <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
       {/* Main Content Split: Recent Lancamentos & Recent Documents */}
       <section className="grid gap-8 lg:grid-cols-5 items-start">
         
