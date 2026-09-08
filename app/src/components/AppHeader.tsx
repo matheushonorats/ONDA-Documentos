@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -53,16 +53,14 @@ function AppHeaderContent() {
               <span className="block truncate text-base font-black tracking-tight text-slate-900 sm:text-lg">
                 Ondas <span className="text-indigo-600">Documentos</span>
               </span>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 -mt-1">
-                Rádios Litoral & Onda Livre
-              </span>
+              
             </div>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Navegação principal">
+          <nav className="hidden items-center gap-1 lg:flex" aria-label="NavegaÃ§Ã£o principal">
             <Link href="/" className={navItemClass(isHomeActive)}>
-              Início
+              InÃ­cio
             </Link>
 
             <Link href="/lancamentos?tipo=RECEITA" className={navItemClass(isReceberActive)}>
@@ -77,12 +75,12 @@ function AppHeaderContent() {
 
             <Link href="/lancamentos?tipo=TODOS" className={navItemClass(isTodosActive)}>
               <ListChecks className="h-4 w-4 text-slate-400" />
-              Todos os Lançamentos
+              Todos os LanÃ§amentos
             </Link>
 
             <Link href="/cobrancas" className={navItemClass(isCobrancasActive)}>
               <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
-              Cobranças
+              CobranÃ§as
             </Link>
 
             {/* Dropdown Cadastros */}
@@ -120,7 +118,7 @@ function AppHeaderContent() {
                     className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
                   >
                     <Building2 className="h-4 w-4 text-slate-400" />
-                    Agências de Publicidade
+                    AgÃªncias de Publicidade
                   </Link>
                 </div>
               )}
@@ -133,7 +131,7 @@ function AppHeaderContent() {
           <Link
             href="/novo-documento"
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all active:scale-[0.98]"
-            title="Anexar arquivos ou link a um lançamento existente"
+            title="Anexar arquivos ou link a um lanÃ§amento existente"
           >
             <UploadCloud className="h-4 w-4 text-indigo-600" />
             Anexar Documento
@@ -144,7 +142,7 @@ function AppHeaderContent() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-all active:scale-[0.98]"
           >
             <PlusCircle className="h-4 w-4" />
-            Novo Lançamento
+            Novo LanÃ§amento
           </Link>
         </div>
 
@@ -162,7 +160,7 @@ function AppHeaderContent() {
 
       {/* Mobile Drawer */}
       {open && (
-        <nav className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden animate-in fade-in duration-200" aria-label="Navegação móvel">
+        <nav className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden animate-in fade-in duration-200" aria-label="NavegaÃ§Ã£o mÃ³vel">
           <div className="grid gap-1">
             <Link
               href="/"
@@ -171,11 +169,11 @@ function AppHeaderContent() {
                 isHomeActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
-              Início
+              InÃ­cio
             </Link>
 
             <div className="pt-2 pb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Lançamentos Financeiros
+              LanÃ§amentos Financeiros
             </div>
 
             <Link
@@ -211,7 +209,7 @@ function AppHeaderContent() {
                 isTodosActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
-              Todos os Lançamentos
+              Todos os LanÃ§amentos
             </Link>
 
             <Link
@@ -223,7 +221,7 @@ function AppHeaderContent() {
             >
               <span className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
-                Cobrança de Agências
+                CobranÃ§a de AgÃªncias
               </span>
             </Link>
 
@@ -250,7 +248,7 @@ function AppHeaderContent() {
               onClick={() => setOpen(false)}
               className="rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
-              Agências de Publicidade
+              AgÃªncias de Publicidade
             </Link>
 
             <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
@@ -260,7 +258,7 @@ function AppHeaderContent() {
                 className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-xs"
               >
                 <PlusCircle className="h-4 w-4" />
-                Novo Lançamento
+                Novo LanÃ§amento
               </Link>
               <Link
                 href="/novo-documento"
@@ -285,3 +283,4 @@ export function AppHeader() {
     </Suspense>
   );
 }
+
