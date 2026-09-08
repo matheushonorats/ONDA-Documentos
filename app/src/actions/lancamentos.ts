@@ -265,8 +265,16 @@ export async function createLancamento(formData: FormData) {
     const dataEmissaoBase = parseDate(formData.get('dataEmissao'));
     const vencimentoBase = parseDate(formData.get('vencimento'));
     
-    let numeroPi = String(formData.get('numeroPi') || '') || null;
-    let numeroContrato = String(formData.get('numeroContrato') || '') || null;
+    let rawPi = String(formData.get('numeroPi') || '').trim();
+    let rawContrato = String(formData.get('numeroContrato') || '').trim();
+
+    let numeroPi = (rawPi && !/^[-_.\s]+$/.test(rawPi) && !/^(?:NENHUM|SEM|NAO|N\/A)$/i.test(rawPi))
+      ? rawPi
+      : null;
+
+    let numeroContrato = (rawContrato && !/^[-_.\s]+$/.test(rawContrato) && !/^(?:PUBLICIDADE|SERVI[ÇC]O|NENHUM|SEM|NAO|N\/A)$/i.test(rawContrato))
+      ? rawContrato
+      : null;
 
     // Garante que grupos de parcelas tenham sempre um identificador comum
     if (gerarParcelas && !numeroPi && !numeroContrato) {
@@ -601,11 +609,20 @@ export async function sincronizarDocumentosPI() {
 
     const piGroups = new Map<string, typeof lancamentos>();
 
+    const cleanKey = (k?: string | null) =>
+      k && !/^[-_.\s]+$/.test(k.trim()) && !/^(?:NENHUM|SEM|NAO|N\/A|PUBLICIDADE|SERVICO)$/i.test(k.trim())
+        ? k.trim().toLowerCase()
+        : null;
+
     for (const l of lancamentos) {
-      const piKey = l.numeroPi ? `PI_${l.numeroPi.trim().toLowerCase()}` : null;
-      const contratoKey = l.numeroContrato ? `CTR_${l.numeroContrato.trim().toLowerCase()}` : null;
+      const piVal = cleanKey(l.numeroPi);
+      const contratoVal = cleanKey(l.numeroContrato);
+      const ownerScope = l.clienteId ? `CLI_${l.clienteId}` : l.colaboradorId ? `COL_${l.colaboradorId}` : 'GERAL';
+
+      const piKey = piVal ? `${ownerScope}_PI_${piVal}` : null;
+      const contratoKey = contratoVal ? `${ownerScope}_CTR_${contratoVal}` : null;
       const appSheetKey = l.appSheetId && l.appSheetId.includes('-') 
-        ? `APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
+        ? `${ownerScope}_APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
         : null;
 
       const groupKey = piKey || contratoKey || appSheetKey;

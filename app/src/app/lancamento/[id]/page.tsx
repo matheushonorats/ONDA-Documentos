@@ -47,15 +47,34 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
 
   if (!lancamento) notFound();
 
-  // Parcelas do mesmo PI, Contrato ou Lote Comercial
+  // Parcelas do mesmo PI, Contrato ou Lote Comercial da mesma empresa
+  const cleanKey = (k?: string | null) =>
+    k && !/^[-_.\s]+$/.test(k.trim()) && !/^(?:NENHUM|SEM|NAO|N\/A)$/i.test(k.trim())
+      ? k.trim()
+      : null;
+
+  const validPi = cleanKey(lancamento.numeroPi);
+  const validContrato = cleanKey(lancamento.numeroContrato);
+
   let parcelasWhere: Record<string, any> | null = null;
-  if (lancamento.numeroPi) {
-    parcelasWhere = { numeroPi: lancamento.numeroPi };
-  } else if (lancamento.numeroContrato) {
-    parcelasWhere = { numeroContrato: lancamento.numeroContrato };
+  if (validPi) {
+    parcelasWhere = {
+      numeroPi: validPi,
+      ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
+      ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
+    };
+  } else if (validContrato) {
+    parcelasWhere = {
+      numeroContrato: validContrato,
+      ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
+      ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
+    };
   } else if (lancamento.appSheetId && lancamento.appSheetId.includes('-')) {
     const prefix = lancamento.appSheetId.split('-').slice(0, -1).join('-');
-    parcelasWhere = { appSheetId: { startsWith: prefix } };
+    parcelasWhere = {
+      appSheetId: { startsWith: prefix },
+      ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
+    };
   }
 
   const parcelas = parcelasWhere
@@ -271,18 +290,18 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
         </dl>
 
         {/* Contract / PI Bar */}
-        {(lancamento.numeroPi || lancamento.numeroContrato || lancamento.mesAnoReferencia) && (
+        {(validPi || validContrato || lancamento.mesAnoReferencia) && (
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-slate-100 bg-slate-50/50 px-6 py-4 text-xs sm:px-8 sm:text-sm">
-            {lancamento.numeroPi && (
+            {validPi && (
               <span>
                 <b className="text-slate-500 mr-1.5 font-semibold">PI (Autorização de Mídia):</b>
-                <span className="font-mono font-bold text-slate-900">{lancamento.numeroPi}</span>
+                <span className="font-mono font-bold text-slate-900">{validPi}</span>
               </span>
             )}
-            {lancamento.numeroContrato && (
+            {validContrato && (
               <span>
                 <b className="text-slate-500 mr-1.5 font-semibold">N.º Contrato:</b>
-                <span className="font-mono font-bold text-slate-900">{lancamento.numeroContrato}</span>
+                <span className="font-mono font-bold text-slate-900">{validContrato}</span>
               </span>
             )}
             {lancamento.mesAnoReferencia && (
@@ -301,7 +320,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-100 bg-linear-to-r from-indigo-50/80 to-white px-6 py-4 sm:px-8">
             <div>
               <h2 className="flex items-center gap-2 text-base sm:text-lg font-black text-indigo-950">
-                <Layers className="h-5 w-5 text-indigo-600" /> Grade de Parcelas {lancamento.numeroPi ? `do PI (${lancamento.numeroPi})` : lancamento.numeroContrato ? `do Contrato (${lancamento.numeroContrato})` : 'da Campanha'}
+                <Layers className="h-5 w-5 text-indigo-600" /> Grade de Parcelas {validPi ? `do PI (${validPi})` : validContrato ? `do Contrato (${validContrato})` : 'da Campanha'}
               </h2>
               <p className="text-xs text-indigo-700 mt-0.5">
                 Campanha parcelada em <strong>{parcelas.length} vezes</strong>. Clique em qualquer parcela para inspecionar ou anexar sua NF específica.

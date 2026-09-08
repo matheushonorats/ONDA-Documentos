@@ -126,15 +126,25 @@ export function parseNfseTextContent(text: string) {
     /\b(?:N[º°o]\.?\s*(?:DO\s+)?P\.?I\.?|PEDIDO\s+DE\s+INSER[ÇC][ÃA]O|P\.?I\.?)[:\s]+([A-Za-z0-9\-\.\/]+)/i
   );
   if (piMatch) {
-    result.numeroPi = piMatch[1].trim();
+    const rawPi = piMatch[1].trim();
+    if (rawPi && !/^[-_.\s]+$/.test(rawPi) && !/^(?:NENHUM|SEM|NAO|N\/A)$/i.test(rawPi)) {
+      result.numeroPi = rawPi;
+    }
   }
 
   // 5. Número do Contrato
   const contratoMatch = text.match(
     /\b(?:N[º°o]\.?\s*(?:DO\s+)?CONTRATO|CONTRATO\s*N[º°o]\.?|CTR)[:\s]+([A-Za-z0-9\-\.\/]+)/i
   );
-  if (contratoMatch && !/^(?:PUBLICIDADE|SERVI[ÇC]O|NENHUM)$/i.test(contratoMatch[1])) {
-    result.numeroContrato = contratoMatch[1].trim();
+  if (contratoMatch) {
+    const rawContrato = contratoMatch[1].trim();
+    if (
+      rawContrato &&
+      !/^[-_.\s]+$/.test(rawContrato) &&
+      !/^(?:PUBLICIDADE|SERVI[ÇC]O|NENHUM|SEM|NAO|N\/A)$/i.test(rawContrato)
+    ) {
+      result.numeroContrato = rawContrato;
+    }
   }
 
   // 6. Mês/Ano Referência
