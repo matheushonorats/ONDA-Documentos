@@ -6,6 +6,7 @@ export type ExtracaoNfeResult = {
     dataEmissao?: string; // YYYY-MM-DD
     vencimento?: string; // YYYY-MM-DD
     numeroPi?: string;
+    numeroContrato?: string;
     mesAnoReferencia?: string; // MM/YYYY
     valor?: number;
     descricao?: string;
@@ -77,6 +78,7 @@ export function parseNfseTextContent(text: string) {
     dataEmissao?: string;
     vencimento?: string;
     numeroPi?: string;
+    numeroContrato?: string;
     mesAnoReferencia?: string;
     valor?: number;
     descricao?: string;
@@ -120,12 +122,22 @@ export function parseNfseTextContent(text: string) {
   }
 
   // 4. Número do PI
-  const piMatch = text.match(/(?:N[º°o]\s*PI|N[ÚU]MERO\s+DO\s+PI|PI)[:\s]+([A-Za-z0-9\-\.\/]+)/i);
+  const piMatch = text.match(
+    /\b(?:N[º°o]\.?\s*(?:DO\s+)?P\.?I\.?|PEDIDO\s+DE\s+INSER[ÇC][ÃA]O|P\.?I\.?)[:\s]+([A-Za-z0-9\-\.\/]+)/i
+  );
   if (piMatch) {
     result.numeroPi = piMatch[1].trim();
   }
 
-  // 5. Mês/Ano Referência
+  // 5. Número do Contrato
+  const contratoMatch = text.match(
+    /\b(?:N[º°o]\.?\s*(?:DO\s+)?CONTRATO|CONTRATO\s*N[º°o]\.?|CTR)[:\s]+([A-Za-z0-9\-\.\/]+)/i
+  );
+  if (contratoMatch && !/^(?:PUBLICIDADE|SERVI[ÇC]O|NENHUM)$/i.test(contratoMatch[1])) {
+    result.numeroContrato = contratoMatch[1].trim();
+  }
+
+  // 6. Mês/Ano Referência
   const servicosMatch = text.match(/SERVI[ÇC]OS\s+EXECUTADOS[:\s]+([A-ZÇ]+)\/(\d{4})/i);
   if (servicosMatch) {
     const mesNome = servicosMatch[1].toLowerCase();
@@ -147,7 +159,7 @@ export function parseNfseTextContent(text: string) {
     }
   }
 
-  // 6. Tomador do Serviço
+  // 7. Tomador do Serviço
   const tomadorSection = text.match(
     /TOMADOR\s+DO\s+SERVI[ÇC]O([\s\S]*?)(?:DESCRI[ÇC][ÃA]O\s+DO\s+SERVI[ÇC]O|DISCRIMINA[ÇC][ÃA]O|DETALHAMENTO)/i
   );
@@ -160,11 +172,19 @@ export function parseNfseTextContent(text: string) {
       result.tomadorCnpj = cnpjMatch[1];
     }
 
-    // Razão Social
+    // Razão Social (suporta tanto valor na mesma linha quanto na linha seguinte da tabela)
     const lines = tomadorText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (/NOME\/RAZ[ÃA]O\s+SOCIAL/i.test(line)) {
+        const inlineVal = line
+          .replace(/^.*?NOME\/RAZ[ÃA]O\s+SOCIAL[:\s]*/i, '')
+          .replace(/(\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2}).*$/, '')
+          .trim();
+        if (inlineVal && !/^(?:CPF|CNPJ|INSC)/i.test(inlineVal)) {
+          result.tomadorNome = inlineVal;
+          break;
+        }
         const nextLine = lines[i + 1] || '';
         const cleaned = nextLine.replace(/(\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2}).*$/, '').trim();
         if (cleaned) {
@@ -175,7 +195,9 @@ export function parseNfseTextContent(text: string) {
     }
 
     // Município Tomador e UF
-    const munMatch = tomadorText.match(/([A-Za-zÀ-ÖØ-öø-ÿ\s]{2,40}?)\s*-\s*([A-Z]{2})(?:\s+\d{2}\.?\d{3}\-?\d{3})?/);
+    const munMatch =
+      tomadorText.match(/([A-Za-zÀ-ÖØ-öø-ÿ\s]{2,40}?)\s*-\s*([A-Z]{2})(?:\s+\d{2}\.?\d{3}\-?\d{3})?/) ||
+      tomadorText.match(/MUNIC[ÍI]PIO[:\s]+([A-Za-zÀ-ÖØ-öø-ÿ\s]{2,40}?)(?:\s*-\s*|\s+UF[:\s]*)([A-Z]{2})/i);
     if (munMatch) {
       const rawCity = munMatch[1].trim();
       const parts = rawCity.split('-').map(p => p.trim());
@@ -187,10 +209,15 @@ export function parseNfseTextContent(text: string) {
     }
   }
 
-  // 7. Agência
+  // 8. Agência
   const agenciaMatch =
-    text.match(/(?:POR\s+ORDEM\s+E\s+CONTA\s+DE|AG[ÊE]NCIA)[:\s]+([^\-\n]+?)\s*-\s*CNPJ:\s*([\d\.\/\-]+)/i) ||
-    text.match(/AG[ÊE]NCIA[:\s]+([^\n]+)/i);
+    text.match(
+      /(?:POR\s+ORDEM\s+E\s+CONTA\s+DE|AG[ÊE]NCIA(?:\s+DE\s+PROPAGANDA|\s+DE\s+PUBLICIDADE)?|AG[ÊE]NCIA)[:\s]+([^\-\n\r]+?)\s*-\s*CNPJ[:\s]*([\d\.\/\-]+)/i
+    ) ||
+    text.match(
+      /(?:POR\s+ORDEM\s+E\s+CONTA\s+DE|AG[ÊE]NCIA(?:\s+DE\s+PROPAGANDA|\s+DE\s+PUBLICIDADE)?|AG[ÊE]NCIA)[:\s]+([^\-\n\r]+?)\s+CNPJ[:\s]*([\d\.\/\-]+)/i
+    ) ||
+    text.match(/\bAG[ÊE]NCIA(?:\s+DE\s+PROPAGANDA|\s+DE\s+PUBLICIDADE)?[:\s]+([^\n\r]+)/i);
   if (agenciaMatch) {
     result.agenciaNome = agenciaMatch[1].trim();
     if (agenciaMatch[2]) {
@@ -198,7 +225,22 @@ export function parseNfseTextContent(text: string) {
     }
   }
 
-  // 8. Valor Líquido / Negociado
+  // 9. Veículo / Rádio Transmissora
+  const veiculoExplicit =
+    text.match(/(?:VE[ÍI]CULO(?:\s*\/\s*R[ÁA]DIO)?|EMISSORA)[:\s]+([^\n\r]+)/i) ||
+    text.match(/R[ÁA]DIO[:\s]+([^\n\r]+)/i);
+
+  if (veiculoExplicit) {
+    result.veiculoNome = veiculoExplicit[1].trim();
+  } else {
+    const irradMatch = text.match(/IRRADIA[ÇC][ÕO]ES\s+COMERCIAIS[\s\r\n]+([^\n\r]+)/i);
+    if (irradMatch) {
+      const rawVeiculo = irradMatch[1].trim();
+      result.veiculoNome = rawVeiculo.replace(/^R[ÁA]DIO\s+/i, '').trim() || rawVeiculo;
+    }
+  }
+
+  // 10. Valor Líquido / Negociado
   const valLiquidoMatch = text.match(/VALOR\s+L[ÍI]QUIDO[\.\s]*R\$\s*([\d\.,;]+)/i);
   const valNegociadoMatch = text.match(/VALOR\s+NEGOCIADO\s*\([^\)]*L[ÍI]QUIDO[^\)]*\)[:\s]+R\$\s*([\d\.,;]+)/i);
   const valServicoMatch = text.match(/VALOR\s+DO\s+SERVI[ÇC]O[\.\s]*R\$\s*([\d\.,;]+)/i);
@@ -214,9 +256,9 @@ export function parseNfseTextContent(text: string) {
     result.valor = parseValorMonetario(valBrutoMatch[1]);
   }
 
-  // 9. Descrição / Campanha / Descritivo
-  const campanhaMatch = text.match(/CAMPANHA[:\s]+([^\n]+)/i);
-  const descritivoMatch = text.match(/DESCRITIVO\s+DO\s+SERVI[ÇC]O[:\s]+([^\n]+)/i);
+  // 11. Descrição / Campanha / Descritivo
+  const campanhaMatch = text.match(/CAMPANHA[:\s]+([^\n\r]+)/i);
+  const descritivoMatch = text.match(/DESCRITIVO\s+DO\s+SERVI[ÇC]O[:\s]+([^\n\r]+)/i);
 
   if (campanhaMatch && descritivoMatch) {
     result.descricao = `${campanhaMatch[1].trim()} - ${descritivoMatch[1].trim()}`;
@@ -224,6 +266,11 @@ export function parseNfseTextContent(text: string) {
     result.descricao = campanhaMatch[1].trim();
   } else if (descritivoMatch) {
     result.descricao = descritivoMatch[1].trim();
+  } else {
+    const discMatch = text.match(/(?:DISCRIMINA[ÇC][ÃA]O|DESCRI[ÇC][ÃA]O)\s+DO[S]?\s+SERVI[ÇC]O[S]?[:\s]+([^\n\r]+)/i);
+    if (discMatch) {
+      result.descricao = discMatch[1].trim();
+    }
   }
 
   return result;

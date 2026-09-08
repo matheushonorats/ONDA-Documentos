@@ -37,6 +37,18 @@ type Props = {
   veiculos: { id: string, nome: string }[];
 };
 
+const UFS_BRASIL = [
+  { sigla: 'AC', nome: 'Acre' }, { sigla: 'AL', nome: 'Alagoas' }, { sigla: 'AP', nome: 'Amapá' },
+  { sigla: 'AM', nome: 'Amazonas' }, { sigla: 'BA', nome: 'Bahia' }, { sigla: 'CE', nome: 'Ceará' },
+  { sigla: 'DF', nome: 'Distrito Federal' }, { sigla: 'ES', nome: 'Espírito Santo' }, { sigla: 'GO', nome: 'Goiás' },
+  { sigla: 'MA', nome: 'Maranhão' }, { sigla: 'MT', nome: 'Mato Grosso' }, { sigla: 'MS', nome: 'Mato Grosso do Sul' },
+  { sigla: 'MG', nome: 'Minas Gerais' }, { sigla: 'PA', nome: 'Pará' }, { sigla: 'PB', nome: 'Paraíba' },
+  { sigla: 'PR', nome: 'Paraná' }, { sigla: 'PE', nome: 'Pernambuco' }, { sigla: 'PI', nome: 'Piauí' },
+  { sigla: 'RJ', nome: 'Rio de Janeiro' }, { sigla: 'RN', nome: 'Rio Grande do Norte' }, { sigla: 'RS', nome: 'Rio Grande do Sul' },
+  { sigla: 'RO', nome: 'Rondônia' }, { sigla: 'RR', nome: 'Roraima' }, { sigla: 'SC', nome: 'Santa Catarina' },
+  { sigla: 'SP', nome: 'São Paulo' }, { sigla: 'SE', nome: 'Sergipe' }, { sigla: 'TO', nome: 'Tocantins' },
+];
+
 export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias, tiposDocumento, veiculos }: Props) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,8 +64,8 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const [novoPessoaDoc, setNovoPessoaDoc] = useState(''); // CNPJ/CPF
   const [novoClienteCidade, setNovoClienteCidade] = useState('');
   
-  // API IBGE
-  const [ufs, setUfs] = useState<{ sigla: string, nome: string }[]>([]);
+  // Estados Brasileiros (Estático com fallback IBGE)
+  const [ufs, setUfs] = useState<{ sigla: string, nome: string }[]>(UFS_BRASIL);
   const [selectedUf, setSelectedUf] = useState('');
   const [cidadesIbge, setCidadesIbge] = useState<{ id: number, nome: string }[]>([]);
 
@@ -121,6 +133,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const [isDraggingNf, setIsDraggingNf] = useState(false);
   const [autoClienteId, setAutoClienteId] = useState<string | null>(null);
   const [autoAgenciaId, setAutoAgenciaId] = useState<string | null>(null);
+  const [autoAgenciaCnpj, setAutoAgenciaCnpj] = useState<string | null>(null);
   const [autoVeiculoId, setAutoVeiculoId] = useState<string | null>(null);
   const [nfExtracaoFeedback, setNfExtracaoFeedback] = useState<{
     sucesso: boolean;
@@ -154,22 +167,36 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       setNovoPessoaNome(dados.novoCliente.razaoSocial);
       if (dados.novoCliente.cnpj) setNovoPessoaDoc(dados.novoCliente.cnpj);
       if (dados.novoCliente.uf) setSelectedUf(dados.novoCliente.uf);
-      if (dados.novoCliente.cidade) setNovoClienteCidade(dados.novoCliente.cidade);
+      if (dados.novoCliente.cidade) {
+        const cityFormatted =
+          dados.novoCliente.uf && !dados.novoCliente.cidade.includes('-')
+            ? `${dados.novoCliente.cidade} - ${dados.novoCliente.uf}`
+            : dados.novoCliente.cidade;
+        setNovoClienteCidade(cityFormatted);
+      }
     } else if (dados.tomadorNome) {
       setNovoRegistro(true);
       setAutoClienteId(null);
       setNovoPessoaNome(dados.tomadorNome);
       if (dados.tomadorCnpj) setNovoPessoaDoc(dados.tomadorCnpj);
       if (dados.tomadorUf) setSelectedUf(dados.tomadorUf);
-      if (dados.tomadorCidade) setNovoClienteCidade(dados.tomadorCidade);
+      if (dados.tomadorCidade) {
+        const cityFormatted =
+          dados.tomadorUf && !dados.tomadorCidade.includes('-')
+            ? `${dados.tomadorCidade} - ${dados.tomadorUf}`
+            : dados.tomadorCidade;
+        setNovoClienteCidade(cityFormatted);
+      }
     }
 
     // 3. Agência
     if (dados.agenciaMatched && dados.agenciaId) {
       setAutoAgenciaId(dados.agenciaId);
+      setAutoAgenciaCnpj(dados.agenciaCnpj || null);
       setBuscaAgencia(dados.agenciaNome || '');
     } else if (dados.agenciaNome) {
       setAutoAgenciaId(null);
+      setAutoAgenciaCnpj(dados.agenciaCnpj || null);
       setBuscaAgencia(dados.agenciaNome);
     }
 
@@ -194,6 +221,9 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
     }
     if (dados.numeroPi) {
       setNumeroPi(dados.numeroPi);
+    }
+    if (dados.numeroContrato) {
+      setNumeroContrato(dados.numeroContrato);
     }
     if (dados.mesAnoReferencia) {
       if (/^\d{2}\/\d{4}$/.test(dados.mesAnoReferencia)) {
@@ -499,18 +529,27 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       
       if (autoAgenciaId) {
         formData.append('agenciaId', autoAgenciaId);
-      } else {
+      } else if (buscaAgencia.trim()) {
         const agenciaQuery = buscaAgencia.trim().toLowerCase();
         const agenciaSelecionada = agencias.find(a => a.nome.toLowerCase() === agenciaQuery || a.id === buscaAgencia);
-        if (agenciaSelecionada) formData.append('agenciaId', agenciaSelecionada.id);
+        if (agenciaSelecionada) {
+          formData.append('agenciaId', agenciaSelecionada.id);
+        } else {
+          formData.append('agenciaNome', buscaAgencia.trim());
+          if (autoAgenciaCnpj) formData.append('agenciaCnpj', autoAgenciaCnpj);
+        }
       }
 
       if (autoVeiculoId) {
         formData.append('veiculoId', autoVeiculoId);
-      } else {
+      } else if (buscaVeiculo.trim()) {
         const veiculoQuery = buscaVeiculo.trim().toLowerCase();
         const veiculoSelecionado = veiculos.find(v => v.nome.toLowerCase() === veiculoQuery || v.id === buscaVeiculo);
-        if (veiculoSelecionado) formData.append('veiculoId', veiculoSelecionado.id);
+        if (veiculoSelecionado) {
+          formData.append('veiculoId', veiculoSelecionado.id);
+        } else {
+          formData.append('veiculoNome', buscaVeiculo.trim());
+        }
       }
 
       if (numeroNotaFiscal.trim()) formData.append('numeroNotaFiscal', numeroNotaFiscal.trim());
@@ -924,15 +963,17 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                   </div>
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Cidade (IBGE)</label>
-                    <select 
+                    <input 
+                      type="text" 
+                      list="cidades-ibge-list"
                       value={novoClienteCidade} 
                       onChange={e => setNovoClienteCidade(e.target.value)} 
-                      disabled={!selectedUf} 
-                      className="block w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-100 disabled:text-slate-400 text-sm"
-                    >
-                      <option value="">Selecione a cidade...</option>
-                      {cidadesIbge.map(c => <option key={c.id} value={`${c.nome} - ${selectedUf}`}>{c.nome}</option>)}
-                    </select>
+                      placeholder={selectedUf ? `Digite ou selecione a cidade (${selectedUf})...` : "Digite ou selecione a cidade..."}
+                      className="block w-full px-3.5 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" 
+                    />
+                    <datalist id="cidades-ibge-list">
+                      {cidadesIbge.map(c => <option key={c.id} value={`${c.nome} - ${selectedUf}`} />)}
+                    </datalist>
                   </div>
                 </div>
               )}
@@ -951,6 +992,9 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
               >
                 <option value="">Selecione o veículo da emissora...</option>
                 {veiculos.map(v => <option key={v.id} value={v.nome}>{v.nome}</option>)}
+                {buscaVeiculo && !veiculos.some(v => v.nome.toLowerCase() === buscaVeiculo.toLowerCase()) && (
+                  <option value={buscaVeiculo}>{buscaVeiculo}</option>
+                )}
               </select>
             </div>
 

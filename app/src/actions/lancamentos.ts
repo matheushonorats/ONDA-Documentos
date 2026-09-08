@@ -299,6 +299,44 @@ export async function createLancamento(formData: FormData) {
       return `${month.toString().padStart(2, '0')}/${year}`;
     };
 
+    let agenciaId = String(formData.get('agenciaId') || '') || null;
+    const agenciaNome = String(formData.get('agenciaNome') || '').trim();
+    const agenciaCnpj = String(formData.get('agenciaCnpj') || '').trim() || null;
+    if (!agenciaId && agenciaNome) {
+      const existingAgencia = await db.agencia.findFirst({
+        where: {
+          OR: [
+            { nome: { equals: agenciaNome } },
+            ...(agenciaCnpj ? [{ cnpj: { contains: agenciaCnpj.replace(/\D/g, '') } }] : []),
+          ],
+        },
+      });
+      if (existingAgencia) {
+        agenciaId = existingAgencia.id;
+      } else {
+        const newAgencia = await db.agencia.create({
+          data: {
+            nome: agenciaNome,
+            cnpj: agenciaCnpj,
+          },
+        });
+        agenciaId = newAgencia.id;
+      }
+    }
+
+    let veiculoId = String(formData.get('veiculoId') || '') || null;
+    const veiculoNome = String(formData.get('veiculoNome') || '').trim();
+    if (!veiculoId && veiculoNome) {
+      const existingVeiculo = await db.veiculo.findFirst({
+        where: {
+          nome: { equals: veiculoNome },
+        },
+      });
+      if (existingVeiculo) {
+        veiculoId = existingVeiculo.id;
+      }
+    }
+
     let primeiroLancamentoId: string | null = null;
     const idsCriados: string[] = [];
 
@@ -317,8 +355,8 @@ export async function createLancamento(formData: FormData) {
           tipoLancamento,
           clienteId,
           colaboradorId,
-          agenciaId: String(formData.get('agenciaId') || '') || null,
-          veiculoId: String(formData.get('veiculoId') || '') || null,
+          agenciaId,
+          veiculoId,
           numeroNotaFiscal: i === 0 ? nf : null, // NF inicial informada fica apenas na 1ª parcela (demais ficam sem NF para emissão mensal)
           descricao: String(formData.get('descricao') || '') || null,
           valor: valorParcela,

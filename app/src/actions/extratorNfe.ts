@@ -30,11 +30,15 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
     }
 
     if (origem === 'URL') {
-      if (!urlNotaFiscal || !/^https?:\/\//i.test(urlNotaFiscal)) {
-        return { success: false, error: 'URL da Nota Fiscal inválida. Certifique-se de incluir http:// ou https://' };
+      if (!urlNotaFiscal) {
+        return { success: false, error: 'URL da Nota Fiscal não fornecida.' };
+      }
+      if (!/^https?:\/\//i.test(urlNotaFiscal)) {
+        urlNotaFiscal = `https://${urlNotaFiscal}`;
       }
 
       const res = await fetch(urlNotaFiscal, {
+        signal: AbortSignal.timeout(15000),
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -153,7 +157,17 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
       select: { id: true, nome: true },
     });
     const textUpper = text.toUpperCase();
-    const matchedVeiculo = allVeiculos.find(v => textUpper.includes(v.nome.toUpperCase()));
+    let matchedVeiculo = allVeiculos.find(v => textUpper.includes(v.nome.toUpperCase())) || null;
+
+    if (!matchedVeiculo && parsed.veiculoNome) {
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const vNorm = norm(parsed.veiculoNome);
+      matchedVeiculo =
+        allVeiculos.find(v => {
+          const dbNorm = norm(v.nome);
+          return dbNorm === vNorm || dbNorm.includes(vNorm) || vNorm.includes(dbNorm);
+        }) || null;
+    }
 
     if (matchedVeiculo) {
       veiculoId = matchedVeiculo.id;
@@ -167,12 +181,13 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
     if (parsed.dataEmissao) camposContados++;
     if (parsed.vencimento) camposContados++;
     if (parsed.numeroPi) camposContados++;
+    if (parsed.numeroContrato) camposContados++;
     if (parsed.mesAnoReferencia) camposContados++;
     if (parsed.valor !== undefined) camposContados++;
     if (parsed.descricao) camposContados++;
     if (clienteId || parsed.tomadorNome) camposContados++;
     if (agenciaId || parsed.agenciaNome) camposContados++;
-    if (veiculoId) camposContados++;
+    if (veiculoId || parsed.veiculoNome) camposContados++;
 
     return {
       success: true,
@@ -181,6 +196,7 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
         dataEmissao: parsed.dataEmissao,
         vencimento: parsed.vencimento,
         numeroPi: parsed.numeroPi,
+        numeroContrato: parsed.numeroContrato,
         mesAnoReferencia: parsed.mesAnoReferencia,
         valor: parsed.valor,
         descricao: parsed.descricao,
