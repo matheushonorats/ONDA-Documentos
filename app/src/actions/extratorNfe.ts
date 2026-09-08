@@ -83,29 +83,63 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
     let clienteNome: string | undefined;
     let clienteMatched = false;
 
-    const tomadorCnpjDigits = parsed.tomadorCnpj?.replace(/\D/g, '');
     const allClientes = await db.cliente.findMany({
       select: { id: true, razaoSocial: true, nomeFantasia: true, cnpj: true, cidade: true },
     });
 
-    let matchedCliente = tomadorCnpjDigits
-      ? allClientes.find(c => c.cnpj && c.cnpj.replace(/\D/g, '') === tomadorCnpjDigits)
+    const cleanDigits = (s?: string | null) => (s ? s.replace(/\D/g, '') : '');
+    const norm = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .trim();
+
+    const tomadorCnpjDigits = cleanDigits(parsed.tomadorCnpj);
+
+    // 1.1 Match prioritário e absoluto por CNPJ completo
+    let matchedCliente = tomadorCnpjDigits && tomadorCnpjDigits.length >= 14
+      ? allClientes.find(c => cleanDigits(c.cnpj) === tomadorCnpjDigits)
       : null;
 
+    // 1.2 Match por raiz do CNPJ (8 primeiros dígitos - mesma empresa/matriz/filial)
+    if (!matchedCliente && tomadorCnpjDigits && tomadorCnpjDigits.length >= 8) {
+      const raizCnpj = tomadorCnpjDigits.slice(0, 8);
+      matchedCliente = allClientes.find(c => {
+        const cDigits = cleanDigits(c.cnpj);
+        return cDigits.length >= 8 && cDigits.startsWith(raizCnpj);
+      }) || null;
+    }
+
+    // 1.3 Match por Razão Social ou Nome Fantasia normalizado
     if (!matchedCliente && parsed.tomadorNome) {
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
       const tNorm = norm(parsed.tomadorNome);
+      const tWords = tNorm.split(/\s+/).filter(w => w.length > 2 && !['ltda', 'epp', 'me', 'eireli', 'sa', 's/a'].includes(w));
+
+      // Busca exata ou por contenção
       matchedCliente =
         allClientes.find(c => {
           const rNorm = norm(c.razaoSocial);
           const fNorm = c.nomeFantasia ? norm(c.nomeFantasia) : '';
           return (
             rNorm === tNorm ||
+            (fNorm && fNorm === tNorm) ||
             rNorm.includes(tNorm) ||
             tNorm.includes(rNorm) ||
-            (fNorm && (fNorm === tNorm || fNorm.includes(tNorm) || tNorm.includes(fNorm)))
+            (fNorm && (fNorm.includes(tNorm) || tNorm.includes(fNorm)))
           );
         }) || null;
+
+      // Busca por palavras-chave significativas se ainda não encontrou
+      if (!matchedCliente && tWords.length > 0) {
+        matchedCliente = allClientes.find(c => {
+          const combined = `${norm(c.razaoSocial)} ${c.nomeFantasia ? norm(c.nomeFantasia) : ''}`;
+          // Se pelo menos as palavras principais coincidem
+          const matchCount = tWords.filter(w => combined.includes(w)).length;
+          return matchCount >= Math.min(tWords.length, 2);
+        }) || null;
+      }
     }
 
     if (matchedCliente) {

@@ -122,14 +122,34 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
 
   // Datalists / Filtros
   const clientesFiltrados = useMemo(() => {
-    const term = buscaPessoa.trim().toLowerCase();
-    if (!term) return clientes.slice(0, 50);
-    return clientes.filter(c => {
-      const matchRazao = c.razaoSocial.toLowerCase().includes(term);
-      const matchFantasia = c.nomeFantasia ? c.nomeFantasia.toLowerCase().includes(term) : false;
-      const matchCnpj = c.cnpj ? c.cnpj.replace(/\D/g, '').includes(term.replace(/\D/g, '')) : false;
-      return matchRazao || matchFantasia || matchCnpj;
-    }).slice(0, 50);
+    const rawTerm = buscaPessoa.trim();
+    if (!rawTerm) return clientes.slice(0, 100);
+
+    const norm = (s: string) =>
+      s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    const cleanDigits = (s: string) => s.replace(/\D/g, '');
+
+    const termNormalized = norm(rawTerm);
+    const termDigits = cleanDigits(rawTerm);
+    const words = termNormalized.split(/\s+/).filter(Boolean);
+
+    return clientes
+      .filter((c) => {
+        const razaoNorm = norm(c.razaoSocial || '');
+        const fantasiaNorm = norm(c.nomeFantasia || '');
+        const cnpjDigits = cleanDigits(c.cnpj || '');
+
+        // 1. Match por dígitos de CNPJ
+        if (termDigits.length >= 3 && cnpjDigits.includes(termDigits)) {
+          return true;
+        }
+
+        // 2. Match de todas as palavras digitadas no nome / fantasia
+        const fullText = `${razaoNorm} ${fantasiaNorm}`;
+        return words.every((w) => fullText.includes(w));
+      })
+      .slice(0, 100);
   }, [clientes, buscaPessoa]);
 
   const colaboradoresFiltrados = colaboradores.filter(c => c.nome.toLowerCase().includes(buscaPessoa.toLowerCase()));
@@ -954,23 +974,48 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                       type="text" 
                       value={buscaPessoa} 
                       onFocus={() => setClienteDropdownOpen(true)}
+                      onClick={() => setClienteDropdownOpen(true)}
                       onChange={(e) => { 
                         setBuscaPessoa(e.target.value); 
                         setAutoClienteId(null);
                         setClienteDropdownOpen(true);
                       }} 
                       placeholder="Busque por razão social, nome fantasia ou CNPJ..."
-                      className="block w-full px-4 py-3 pr-10 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm font-medium" 
+                      className={`block w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm font-medium pr-28 ${
+                        autoClienteId ? 'border-emerald-300 bg-emerald-50/20 text-emerald-950 font-bold' : 'border-slate-300'
+                      }`} 
                     />
-                    {autoClienteId ? (
-                      <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-300">
-                        <Check className="h-3 w-3" /> Vinculado
-                      </span>
-                    ) : (
-                      <span className="absolute right-3 top-3.5 text-xs text-slate-400 pointer-events-none">
-                        ▼
-                      </span>
-                    )}
+
+                    <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+                      {autoClienteId ? (
+                        <div className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 shadow-2xs">
+                            <Check className="h-3 w-3" /> Vinculado
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAutoClienteId(null);
+                              setBuscaPessoa('');
+                              setClienteDropdownOpen(true);
+                            }}
+                            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                            title="Desvincular e buscar outro cliente"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setClienteDropdownOpen((prev) => !prev)}
+                          className="p-1 text-slate-400 hover:text-slate-600 transition"
+                          title="Exibir todos os clientes cadastrados"
+                        >
+                          <span className="text-xs">▼</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Dropdown de Clientes com CNPJ e Cidade */}
