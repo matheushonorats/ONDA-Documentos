@@ -310,10 +310,10 @@ export function buildEmailData(grupo: AgenciaGrupo, modoTeste: boolean): EmailGe
     <!-- Cabeçalho Institucional Ondas 985 -->
     <div style="background-color: #003366; padding: 26px 28px; text-align: left;">
       <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">
-        Ondas 985 — Financeiro
+        Financeiro
       </h1>
       <p style="color: #93c5fd; margin: 4px 0 0 0; font-size: 13px; font-weight: 500;">
-        Rádios Litoral FM &amp; Onda Livre FM
+        Ondas Sistema de Radiodifusão LTDA
       </p>
     </div>
 
@@ -368,9 +368,9 @@ export function buildEmailData(grupo: AgenciaGrupo, modoTeste: boolean): EmailGe
       <!-- Assinatura -->
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #64748b;">
         <p style="margin: 0; font-weight: 600; color: #1e293b;">Atenciosamente,</p>
-        <p style="margin: 2px 0 0 0; color: #003366; font-weight: 700; font-size: 14px;">Departamento Financeiro — Ondas 985</p>
-        <p style="margin: 2px 0 0 0; color: #475569;">E-mail: <a href="mailto:${FINANCEIRO_EMAIL}" style="color: #0284c7; text-decoration: none;">${FINANCEIRO_EMAIL}</a></p>
-        <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Rádios Litoral FM &amp; Onda Livre FM</p>
+        <p style="margin: 2px 0 0 0; color: #003366; font-weight: 700; font-size: 14px;">Financeiro</p>
+        <p style="margin: 2px 0 0 0; color: #475569;">Ondas Sistema de Radiodifusão LTDA</p>
+        <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">E-mail: <a href="mailto:${FINANCEIRO_EMAIL}" style="color: #0284c7; text-decoration: none;">${FINANCEIRO_EMAIL}</a></p>
       </div>
     </div>
   </div>
@@ -407,9 +407,9 @@ Solicitamos, por gentileza, a verificação interna junto ao setor financeiro:
 Permanecemos à inteira disposição para qualquer esclarecimento.
 
 Atenciosamente,
-Departamento Financeiro — Ondas 985
-E-mail: ${FINANCEIRO_EMAIL}
-Rádios Litoral FM & Onda Livre FM`;
+Financeiro
+Ondas Sistema de Radiodifusão LTDA
+E-mail: ${FINANCEIRO_EMAIL}`;
 
   // Em Modo Teste, o destinatário direto do mailto é o financeiro da rádio com cópia de segurança
   const destinatarios = modoTeste ? [FINANCEIRO_EMAIL] : grupo.emails;

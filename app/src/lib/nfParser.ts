@@ -256,20 +256,26 @@ export function parseNfseTextContent(text: string) {
     result.valor = parseValorMonetario(valBrutoMatch[1]);
   }
 
-  // 11. Descrição / Campanha / Descritivo
-  const campanhaMatch = text.match(/CAMPANHA[:\s]+([^\n\r]+)/i);
-  const descritivoMatch = text.match(/DESCRITIVO\s+DO\s+SERVI[ÇC]O[:\s]+([^\n\r]+)/i);
+  // 11. Descrição / Discriminação dos Serviços na Íntegra
+  const discriminacaoBlock = text.match(
+    /(?:DISCRIMINA[ÇC][ÃA]O|DESCRI[ÇC][ÃA]O)\s+DO[S]?\s+SERVI[ÇC]O[S]?[:\s]*([\s\S]*?)(?=(?:VALOR\s+TOTAL|VALOR\s+DO\s+SERVI[ÇC]O|VALOR\s+L[ÍI]QUIDO|VALOR\s+BRUTO|RETEN[ÇC][ÕO]ES|DADOS\s+BANC[ÁA]RIOS|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|TRIBUTA[ÇC][ÃA]O|BASE\s+DE\s+C[ÁA]LCULO|C[ÓO]DIGO\s+DO\s+SERVI[ÇC]O|SUBITEM|OBSERVA[ÇC][ÕO]ES|$))/i
+  );
 
-  if (campanhaMatch && descritivoMatch) {
-    result.descricao = `${campanhaMatch[1].trim()} - ${descritivoMatch[1].trim()}`;
-  } else if (campanhaMatch) {
-    result.descricao = campanhaMatch[1].trim();
-  } else if (descritivoMatch) {
-    result.descricao = descritivoMatch[1].trim();
+  if (discriminacaoBlock && discriminacaoBlock[1].trim().length > 3) {
+    result.descricao = discriminacaoBlock[1]
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   } else {
-    const discMatch = text.match(/(?:DISCRIMINA[ÇC][ÃA]O|DESCRI[ÇC][ÃA]O)\s+DO[S]?\s+SERVI[ÇC]O[S]?[:\s]+([^\n\r]+)/i);
-    if (discMatch) {
-      result.descricao = discMatch[1].trim();
+    const campanhaMatch = text.match(/CAMPANHA[:\s]+([^\n\r]+)/i);
+    const descritivoMatch = text.match(/DESCRITIVO\s+DO\s+SERVI[ÇC]O[:\s]+([^\n\r]+)/i);
+
+    if (campanhaMatch && descritivoMatch) {
+      result.descricao = `${campanhaMatch[1].trim()} - ${descritivoMatch[1].trim()}`;
+    } else if (campanhaMatch) {
+      result.descricao = campanhaMatch[1].trim();
+    } else if (descritivoMatch) {
+      result.descricao = descritivoMatch[1].trim();
     }
   }
 

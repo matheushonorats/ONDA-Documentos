@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { createLancamento } from '@/actions/lancamentos';
 import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
+import { adicionarCobranca } from '@/actions/cobrancas';
 import type { ExtracaoNfeResult } from '@/lib/nfParser';
 
 type Props = {
@@ -120,10 +121,38 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const [arquivos, setArquivos] = useState<{ tipoId: string, novoTipoDocumento: string, nomeOriginal: string, file: File | null }[]>([]);
 
   // Datalists / Filtros
-  const clientesFiltrados = clientes.filter(c => `${c.nomeFantasia || ''} ${c.razaoSocial}`.toLowerCase().includes(buscaPessoa.toLowerCase()));
+  const clientesFiltrados = useMemo(() => {
+    const term = buscaPessoa.trim().toLowerCase();
+    if (!term) return clientes.slice(0, 50);
+    return clientes.filter(c => {
+      const matchRazao = c.razaoSocial.toLowerCase().includes(term);
+      const matchFantasia = c.nomeFantasia ? c.nomeFantasia.toLowerCase().includes(term) : false;
+      const matchCnpj = c.cnpj ? c.cnpj.replace(/\D/g, '').includes(term.replace(/\D/g, '')) : false;
+      return matchRazao || matchFantasia || matchCnpj;
+    }).slice(0, 50);
+  }, [clientes, buscaPessoa]);
+
   const colaboradoresFiltrados = colaboradores.filter(c => c.nome.toLowerCase().includes(buscaPessoa.toLowerCase()));
   const agenciasFiltradas = agencias.filter(a => a.nome.toLowerCase().includes(buscaAgencia.toLowerCase()));
   const veiculosFiltrados = veiculos.filter(v => v.nome.toLowerCase().includes(buscaVeiculo.toLowerCase()));
+
+  // Dropdown e seleção controlada de cliente
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
+  const clienteDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Integração com Planilha Semanal de Cobranças de Agência
+  const [enviarParaCobrancaAgencia, setEnviarParaCobrancaAgencia] = useState(false);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(event.target as Node)) {
+        setClienteDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Estados do Preenchimento Automático por NF (PDF / Link)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -583,6 +612,30 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
 
       const res = await createLancamento(formData);
       if (res?.success) {
+        // Se o usuário optou por enviar para a planilha de cobranças automáticas de agência
+        if (enviarParaCobrancaAgencia && buscaAgencia.trim() && numeroPi.trim()) {
+          try {
+            let dataFormatada = vencimento;
+            if (vencimento && vencimento.includes('-')) {
+              const [ano, mes, dia] = vencimento.split('-');
+              dataFormatada = `${dia}/${mes}/${ano}`;
+            }
+
+            await adicionarCobranca({
+              pi: numeroPi.trim(),
+              veiculo: buscaVeiculo.trim() || 'ONDAS 985',
+              agencia: buscaAgencia.trim(),
+              valor: valor ? valor.replace('.', ',') : '0,00',
+              dataVencimento: dataFormatada || '',
+              email: '',
+              link: urlNotaFiscal.trim() || '',
+              obs: descricao.trim() ? `Ref: ${descricao.trim().slice(0, 100)}` : '',
+            });
+          } catch (cobrancaErr) {
+            console.error('Falha ao registrar cobrança automática no Google Sheets:', cobrancaErr);
+          }
+        }
+
         router.push(`/lancamento/${res.id}`);
       } else {
         alert(res?.error || 'Não foi possível salvar o lançamento.');
@@ -892,26 +945,105 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                 {tipoLancamento === 'RECEITA' ? 'Cliente / Anunciante' : 'Colaborador / Fornecedor'} <span className="text-red-500">*</span>
               </label>
-              <input 
-                required 
-                type="text" 
-                list="pessoas-list"
-                value={buscaPessoa} 
-                onChange={(e) => { setBuscaPessoa(e.target.value); setAutoClienteId(null); }} 
-                placeholder={`Digite o nome do ${tipoLancamento === 'RECEITA' ? 'cliente ou razão social' : 'colaborador ou fornecedor'}...`}
-                className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm" 
-              />
-              <datalist id="pessoas-list">
-                {tipoLancamento === 'RECEITA' ? (
-                  clientesFiltrados.map(c => (
-                    <option key={c.id} value={c.nomeFantasia || c.razaoSocial}>
-                      {c.razaoSocial} {c.nomeFantasia ? `(${c.nomeFantasia})` : ''}
-                    </option>
-                  ))
-                ) : (
-                  colaboradoresFiltrados.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)
-                )}
-              </datalist>
+
+              {tipoLancamento === 'RECEITA' ? (
+                <div ref={clienteDropdownRef} className="relative">
+                  <div className="relative">
+                    <input 
+                      required 
+                      type="text" 
+                      value={buscaPessoa} 
+                      onFocus={() => setClienteDropdownOpen(true)}
+                      onChange={(e) => { 
+                        setBuscaPessoa(e.target.value); 
+                        setAutoClienteId(null);
+                        setClienteDropdownOpen(true);
+                      }} 
+                      placeholder="Busque por razão social, nome fantasia ou CNPJ..."
+                      className="block w-full px-4 py-3 pr-10 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm font-medium" 
+                    />
+                    {autoClienteId ? (
+                      <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-300">
+                        <Check className="h-3 w-3" /> Vinculado
+                      </span>
+                    ) : (
+                      <span className="absolute right-3 top-3.5 text-xs text-slate-400 pointer-events-none">
+                        ▼
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dropdown de Clientes com CNPJ e Cidade */}
+                  {clienteDropdownOpen && (
+                    <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5">
+                      {clientesFiltrados.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-slate-500">
+                          Nenhum cliente cadastrado encontrado com esse nome/CNPJ.
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNovoRegistro(true);
+                              setNovoPessoaNome(buscaPessoa);
+                              setClienteDropdownOpen(false);
+                            }}
+                            className="mt-2 block w-full rounded-lg bg-indigo-50 px-2 py-1.5 font-bold text-indigo-700 hover:bg-indigo-100 text-xs"
+                          >
+                            + Cadastrar "{buscaPessoa}" agora
+                          </button>
+                        </div>
+                      ) : (
+                        clientesFiltrados.map((c) => {
+                          const isSelected = autoClienteId === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setAutoClienteId(c.id);
+                                setBuscaPessoa(c.nomeFantasia ? `${c.razaoSocial} (${c.nomeFantasia})` : c.razaoSocial);
+                                setClienteDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition cursor-pointer flex flex-col gap-0.5 ${
+                                isSelected ? 'bg-indigo-50 text-indigo-900 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold truncate text-slate-900">
+                                  {c.razaoSocial}
+                                </span>
+                                {c.cnpj && (
+                                  <span className="font-mono text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                                    {c.cnpj}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                {c.nomeFantasia && <span>Fantasia: {c.nomeFantasia}</span>}
+                                {c.cidade && <span>• {c.cidade}</span>}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <input 
+                    required 
+                    type="text" 
+                    list="pessoas-list"
+                    value={buscaPessoa} 
+                    onChange={(e) => setBuscaPessoa(e.target.value)} 
+                    placeholder="Digite o nome do colaborador ou fornecedor..."
+                    className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white shadow-sm" 
+                  />
+                  <datalist id="pessoas-list">
+                    {colaboradoresFiltrados.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                  </datalist>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-4 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100">
@@ -1014,6 +1146,26 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                 <datalist id="agencias-list">
                   {agenciasFiltradas.map(a => <option key={a.id} value={a.nome} />)}
                 </datalist>
+
+                {/* Opção de inclusão na planilha de cobrança semanal de agências */}
+                {buscaAgencia.trim() && (
+                  <label className="flex items-start gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 text-xs text-indigo-950 transition cursor-pointer hover:bg-indigo-50">
+                    <input
+                      type="checkbox"
+                      checked={enviarParaCobrancaAgencia}
+                      onChange={(e) => setEnviarParaCobrancaAgencia(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <span className="font-bold block text-slate-900">
+                        Incluir na planilha de cobrança semanal de agências
+                      </span>
+                      <span className="text-[11px] text-slate-600">
+                        Insere este contrato automaticamente no Google Sheets da rádio para controle e disparo de cobranças.
+                      </span>
+                    </div>
+                  </label>
+                )}
               </div>
             )}
           </div>

@@ -51,7 +51,7 @@ export default async function Home() {
                 <Radio className="h-3 w-3" /> Sistema de Gestão Documental & Financeira
               </span>
               <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
-                Onda Livre FM • Rock News • Litoral
+                Ondas Sistema de Radiodifusão LTDA
               </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl text-white">
@@ -279,10 +279,10 @@ export default async function Home() {
               <span className="text-xs text-slate-400 font-medium">Cobrança Semanal Ondas 985</span>
             </div>
             <h3 className="text-lg font-black text-white">
-              Cobrança de Agências &amp; Relatórios para a Diretoria
+              Cobrança de Agências de Publicidade
             </h3>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              Consolidação automática das autorizações de mídia (PIs) vencidas, geração de e-mails formais e relatórios timbrados para auditoria da Diretoria em PDF.
+              Consolidação automática das autorizações de mídia (PIs) vencidas, geração de e-mails formais e relatórios em PDF.
             </p>
           </div>
           <Link

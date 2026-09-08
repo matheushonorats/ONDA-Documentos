@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { X, PlusCircle, Loader2 } from 'lucide-react';
@@ -115,7 +115,7 @@ export function NovaCobrancaModal({ isOpen, onClose, onSuccess }: NovaCobrancaMo
               <input
                 type="text"
                 required
-                placeholder="Ex: ONDAS 985, LITORAL FM"
+                placeholder="Ex: ONDAS 985"
                 value={formData.veiculo}
                 onChange={(e) => setFormData({ ...formData, veiculo: e.target.value })}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"

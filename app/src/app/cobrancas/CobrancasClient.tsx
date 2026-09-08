@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Loader2,
   Undo2,
+  Link2,
 } from 'lucide-react';
 import {
   CobrancasDataResponse,
@@ -42,6 +43,7 @@ import {
   desmarcarPago,
   atualizarNovaData,
   atualizarObs,
+  atualizarLink,
 } from '@/actions/cobrancas';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
 import { EmailPreviewModal } from './EmailPreviewModal';
@@ -174,6 +176,27 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
     }
   }
 
+  // Atualizar Link da cobrança diretamente na planilha
+  async function handleEditLink(item: { cobrancaNo: string; pi: string; link?: string }) {
+    const novoLink = prompt(
+      `Informe o link (URL do boleto, NF ou Drive) para o PI ${item.pi}:`,
+      item.link || ''
+    );
+    if (novoLink === null) return;
+    if (novoLink.trim() === (item.link || '').trim()) return;
+
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      await atualizarLink(item.cobrancaNo, item.pi, novoLink.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar link:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
   // Copia resumo de PIs de uma agência com suporte resiliente a navegadores
   async function handleCopyResumo(grupo: AgenciaGrupo) {
     const lines = [
@@ -258,7 +281,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
               Cobrança de Agências de Publicidade
             </h1>
             <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Consolidação automática das autorizações de mídia (PIs) vencidas, geração de e-mails formais e relatórios timbrados para auditoria da Diretoria.
+              Consolidação automática das autorizações de mídia (PIs) vencidas, geração de e-mails e relatórios em PDF.
             </p>
           </div>
 
@@ -319,15 +342,15 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
               {isPending ? 'Sincronizando...' : 'Sincronizar Planilha'}
             </button>
 
-            {/* Relatório Geral Consolidado p/ Diretoria Button */}
+            {/* Relatório Geral Consolidado Button */}
             <button
               type="button"
               onClick={() => setIsRelatorioGeralOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 border border-amber-400/40 px-4 py-2.5 text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-              title="Gera o Relatório Consolidado de todas as agências para prestação de contas à Diretoria"
+              title="Gera o Panorama Geral de todas as agências em PDF"
             >
               <Printer className="h-4 w-4 text-amber-300" />
-              Relatório Diretoria (PDF)
+              Relatório Geral (PDF)
             </button>
 
             {/* Link Planilha Externa */}
@@ -659,6 +682,15 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                                         <ExternalLink className="h-3 w-3" />
                                       </a>
                                     ) : null}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditLink(debt)}
+                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition"
+                                      title={debt.link ? "Alterar link na planilha" : "Adicionar link na planilha"}
+                                    >
+                                      <Link2 className="h-3 w-3" />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -696,15 +728,15 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                             Ver E-mail &amp; Disparar
                           </button>
 
-                          {/* Botão Urgente Solicitado: Comprovante p/ Diretoria */}
+                          {/* Botão Relatório Individual da Agência */}
                           <button
                             type="button"
                             onClick={() => setComprovanteModalAgency(grupo)}
                             className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100/80 px-3.5 py-2.5 text-xs font-bold text-amber-900 shadow-2xs transition active:scale-95 cursor-pointer"
-                            title="Gera o documento timbrado formal em A4 pronto para impressão/PDF para auditoria e prestação de contas à diretoria"
+                            title="Gera o relatório direto de 1 página com as pendências desta agência"
                           >
                             <Printer className="h-4 w-4 text-amber-700" />
-                            Comprovante p/ Diretoria (PDF)
+                            Relatório da Agência (1 Pág)
                           </button>
 
                           {/* Copiar Resumo */}
@@ -887,19 +919,30 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                             {item.ultCobranca || '—'}
                           </td>
                           <td className="px-3.5 py-2.5 text-center">
-                            {item.link ? (
-                              <a
-                                href={item.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
-                                title="Abrir link"
+                            <div className="flex items-center justify-center gap-1">
+                              {item.link ? (
+                                <a
+                                  href={item.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                                  title="Abrir link cadastrado na planilha"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleEditLink(item)}
+                                disabled={isRowUpdating}
+                                className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition"
+                                title={item.link ? "Alterar link na planilha" : "Adicionar link na planilha"}
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
+                                <Link2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3.5 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -965,12 +1008,11 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
         }}
       />
 
-      {/* Modal 2: Comprovante Oficial Individual p/ Diretoria (PDF) */}
+      {/* Modal 2: Relatório Direto Individual da Agência (A4) */}
       <ComprovanteModal
         isOpen={!!comprovanteModalAgency}
         onClose={() => setComprovanteModalAgency(null)}
         grupo={comprovanteModalAgency}
-        email={comprovanteModalAgency ? buildEmailData(comprovanteModalAgency, false) : null}
       />
 
       {/* Modal 3: Relatório Geral Consolidado p/ Diretoria (PDF) */}

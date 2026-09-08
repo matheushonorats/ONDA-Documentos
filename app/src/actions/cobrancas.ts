@@ -371,6 +371,28 @@ export async function atualizarObs(
 }
 
 /**
+ * Atualiza o link (URL do boleto / NF / comprovante) de um contrato na planilha Google Sheets.
+ */
+export async function atualizarLink(
+  cobrancaNo: string,
+  pi: string,
+  link: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.LINK, link.trim());
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar link:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
  * Adiciona uma nova cobrança como nova linha na planilha Google Sheets.
  */
 export async function adicionarCobranca(
