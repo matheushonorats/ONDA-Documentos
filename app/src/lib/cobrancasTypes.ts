@@ -3,7 +3,7 @@ export const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADS
 export const SPREADSHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=0`;
 
 export const FINANCEIRO_EMAIL = 'adm@ondas985.com.br';
-export const FINANCEIRO_SENDER_NAME = 'Financeiro Ondas 985';
+export const FINANCEIRO_SENDER_NAME = 'Ondas Sistema de Radiodifusão LTDA';
 
 export interface DebitoItem {
   cobrancaNo: string;

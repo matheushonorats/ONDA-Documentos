@@ -276,7 +276,7 @@ export default async function Home() {
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-black text-amber-300 ring-1 ring-amber-400/30">
                 ⚡ Planilha Google Sheets Integrada
               </span>
-              <span className="text-xs text-slate-400 font-medium">Cobrança Semanal Ondas 985</span>
+              <span className="text-xs text-slate-400 font-medium">Cobrança de Agências</span>
             </div>
             <h3 className="text-lg font-black text-white">
               Cobrança de Agências de Publicidade

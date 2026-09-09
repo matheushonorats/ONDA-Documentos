@@ -643,7 +643,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
 
             await adicionarCobranca({
               pi: numeroPi.trim(),
-              veiculo: buscaVeiculo.trim() || 'ONDAS 985',
+              veiculo: buscaVeiculo.trim() || '',
               agencia: buscaAgencia.trim(),
               valor: valor ? valor.replace('.', ',') : '0,00',
               dataVencimento: dataFormatada || '',

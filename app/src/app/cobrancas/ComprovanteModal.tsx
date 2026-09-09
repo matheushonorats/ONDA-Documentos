@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
 import { X, Printer, Building2, Mail } from 'lucide-react';
@@ -70,10 +70,10 @@ export function ComprovanteModal({ isOpen, onClose, grupo }: ComprovanteModalPro
                 <Image src="/ondas.png" alt="Ondas 985" width={40} height={40} className="h-10 w-auto object-contain" />
                 <div>
                   <h1 className="text-base font-black text-slate-900 tracking-tight leading-tight">
-                    ONDAS 985 <span className="text-indigo-600">DOCUMENTOS</span>
+                    ONDAS <span className="text-indigo-600">DOCUMENTOS</span>
                   </h1>
                   <p className="text-[11px] font-semibold text-slate-600">
-                    Financeiro • Ondas Sistema de Radiodifusão LTDA
+                    Ondas Sistema de Radiodifusão LTDA
                   </p>
                 </div>
               </div>

@@ -44,6 +44,8 @@ import {
   atualizarNovaData,
   atualizarObs,
   atualizarLink,
+  atualizarUltimaCobranca,
+  registrarEnvioCobrancaAgencia,
 } from '@/actions/cobrancas';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
 import { EmailPreviewModal } from './EmailPreviewModal';
@@ -196,6 +198,40 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
       setUpdatingKey(null);
     }
   }
+
+  // Registrar Envio de Cobrança da agência inteira (grava a data de hoje na coluna Últ. Cobrança de todos os PIs)
+  async function handleRegistrarEnvioAgencia(grupo: AgenciaGrupo) {
+    try {
+      const debtsToUpdate = grupo.debts.map((d) => ({ cobrancaNo: d.cobrancaNo, pi: d.pi }));
+      await registrarEnvioCobrancaAgencia(debtsToUpdate);
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao registrar envio da cobrança:', err);
+    }
+  }
+
+  // Editar manualmente a data de Última Cobrança de uma linha
+  async function handleEditUltimaCobranca(item: ContratoCompleto) {
+    const hojePadrao = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const novaData = prompt(
+      `Informe a data da última cobrança (DD/MM/AAAA) para o PI ${item.pi}:`,
+      item.ultCobranca || hojePadrao
+    );
+    if (novaData === null) return;
+    if (novaData.trim() === (item.ultCobranca || '').trim()) return;
+
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      await atualizarUltimaCobranca(item.cobrancaNo, item.pi, novaData.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar última cobrança:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
 
   // Copia resumo de PIs de uma agência com suporte resiliente a navegadores
   async function handleCopyResumo(grupo: AgenciaGrupo) {
@@ -760,7 +796,11 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                           href={emailData.mailtoUrl}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() => {
+                            handleRegistrarEnvioAgencia(grupo);
+                          }}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-700 transition cursor-pointer"
+                          title="Abre o Webmail e registra a data de hoje na coluna Última Cobrança"
                         >
                           <Mail className="h-4 w-4 text-indigo-600" />
                           Abrir no Webmail
@@ -915,8 +955,19 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                           <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600 max-w-xs truncate" title={item.email}>
                             {item.email || '—'}
                           </td>
-                          <td className="px-3.5 py-2.5 text-slate-500">
-                            {item.ultCobranca || '—'}
+                          <td className="px-3.5 py-2.5 text-slate-600">
+                            <div className="flex items-center gap-1">
+                              <span>{item.ultCobranca || '—'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleEditUltimaCobranca(item)}
+                                disabled={isRowUpdating}
+                                className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition"
+                                title="Editar data da última cobrança no Sheets"
+                              >
+                                <Calendar className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3.5 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -1006,6 +1057,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
           setEmailModalAgency(null);
           setComprovanteModalAgency(grupo);
         }}
+        onRegistrarEnvio={handleRegistrarEnvioAgencia}
       />
 
       {/* Modal 2: Relatório Direto Individual da Agência (A4) */}

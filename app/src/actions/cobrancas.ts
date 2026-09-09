@@ -393,6 +393,57 @@ export async function atualizarLink(
 }
 
 /**
+ * Atualiza a coluna Última Cobrança de um contrato específico.
+ */
+export async function atualizarUltimaCobranca(
+  cobrancaNo: string,
+  pi: string,
+  dataStr?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    const hojeStr = dataStr || new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    await updateCell(row, COLS.ULT_COB, hojeStr);
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar última cobrança:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Registra o disparo de cobrança para TODOS os débitos de uma agência,
+ * preenchendo a coluna 'Últ. Cobrança' com a data de hoje.
+ */
+export async function registrarEnvioCobrancaAgencia(
+  debts: { cobrancaNo: string; pi: string }[]
+): Promise<{ success: boolean; error?: string; atualizados: number }> {
+  try {
+    const hojeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    let atualizados = 0;
+
+    for (const d of debts) {
+      const row = await findRowByCobrancaNo(d.cobrancaNo, d.pi);
+      if (row) {
+        await updateCell(row, COLS.ULT_COB, hojeStr);
+        atualizados++;
+      }
+    }
+
+    await revalidateCobrancasCache();
+    return { success: true, atualizados };
+  } catch (error: any) {
+    console.error('Erro ao registrar envio de cobrança da agência:', error);
+    return { success: false, error: error?.message || 'Erro ao atualizar planilha.', atualizados: 0 };
+  }
+}
+
+
+/**
  * Adiciona uma nova cobrança como nova linha na planilha Google Sheets.
  */
 export async function adicionarCobranca(

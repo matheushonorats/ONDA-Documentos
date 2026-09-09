@@ -22,6 +22,7 @@ interface EmailPreviewModalProps {
   grupo: AgenciaGrupo | null;
   modoTeste: boolean;
   onOpenComprovante?: (grupo: AgenciaGrupo) => void;
+  onRegistrarEnvio?: (grupo: AgenciaGrupo) => Promise<void>;
 }
 
 export function EmailPreviewModal({
@@ -30,11 +31,14 @@ export function EmailPreviewModal({
   grupo,
   modoTeste,
   onOpenComprovante,
+  onRegistrarEnvio,
 }: EmailPreviewModalProps) {
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html');
   const [copiedText, setCopiedText] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [copiedSubject, setCopiedSubject] = useState(false);
+  const [isRegistrando, setIsRegistrando] = useState(false);
+  const [registradoSucesso, setRegistradoSucesso] = useState(false);
 
   // Fecha o modal ao pressionar a tecla Escape
   useEffect(() => {
@@ -242,11 +246,44 @@ export function EmailPreviewModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {onRegistrarEnvio && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (isRegistrando) return;
+                  setIsRegistrando(true);
+                  try {
+                    await onRegistrarEnvio(grupo);
+                    setRegistradoSucesso(true);
+                    setTimeout(() => setRegistradoSucesso(false), 3000);
+                  } finally {
+                    setIsRegistrando(false);
+                  }
+                }}
+                disabled={isRegistrando}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Atualiza a coluna 'Últ. Cobrança' com a data de hoje para todos os contratos desta agência no Google Sheets"
+              >
+                {registradoSucesso ? (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <Check className="h-4 w-4 text-emerald-700" />
+                )}
+                {isRegistrando ? 'Gravando...' : registradoSucesso ? 'Data Gravada!' : 'Registrar Envio no Sheets'}
+              </button>
+            )}
+
             <a
               href={emailData.mailtoUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={async () => {
+                if (onRegistrarEnvio) {
+                  onRegistrarEnvio(grupo).catch((e) => console.error('Erro ao registrar envio ao abrir webmail:', e));
+                }
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition active:scale-95 cursor-pointer"
+              title="Abre o Gmail / Webmail e já atualiza a data da última cobrança no Google Sheets"
             >
               <ExternalLink className="h-4 w-4" />
               Abrir no Webmail / Gmail
