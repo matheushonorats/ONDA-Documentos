@@ -1,6 +1,8 @@
 import { getLancamentoById } from '@/actions/lancamentos';
 import { getTiposDocumento } from '@/actions/documentos';
 import { CopyPageLinkButton } from '@/components/CopyPageLinkButton';
+import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
+import { CopyCnpj } from '@/components/CopyCnpj';
 import { DocumentoCard } from '@/components/DocumentoCard';
 import { HistoricoTimeline } from '@/components/HistoricoTimeline';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
@@ -96,6 +98,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
   const owner = isClient
     ? lancamento.cliente?.nomeFantasia || lancamento.cliente?.razaoSocial
     : lancamento.colaborador?.nome;
+  const cnpjEmpresa = isClient ? lancamento.cliente?.cnpj : lancamento.colaborador?.cpfCnpj;
   const hasNf = Boolean(lancamento.numeroNotaFiscal);
 
   // Separar Documentos Mestres (PI, Contrato, Autorização) de Documentos da Parcela (NF, Boleto, Comprovante)
@@ -129,6 +132,14 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
+          {cnpjEmpresa && (
+            <CopyCnpj cnpj={cnpjEmpresa} label="Copiar CNPJ" variant="topbar" />
+          )}
+
+          {lancamento.descricao && (
+            <CopyDescricaoButton text={lancamento.descricao} label="Copiar Texto da Nota" variant="topbar" />
+          )}
+
           <CopyPageLinkButton />
 
           <Link
@@ -180,7 +191,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
               )}
             </div>
 
-            <div>
+            <div className="flex flex-wrap items-center gap-3">
               <Link
                 href={
                   isClient && lancamento.clienteId
@@ -193,12 +204,33 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
               >
                 {owner || 'Sem identificação'}
               </Link>
+
+              {cnpjEmpresa && (
+                <CopyCnpj
+                  cnpj={cnpjEmpresa}
+                  variant="badge"
+                  className="bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
+                />
+              )}
             </div>
 
             {lancamento.descricao && (
-              <p className="max-w-3xl text-sm font-medium leading-relaxed text-slate-300">
-                {lancamento.descricao}
-              </p>
+              <div className="mt-4 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 space-y-2 max-w-4xl">
+                <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                    Descrição / Observações Operacionais da Nota
+                  </span>
+                  <CopyDescricaoButton
+                    text={lancamento.descricao}
+                    label="Copiar Texto da Nota"
+                    variant="topbar"
+                    className="bg-white/10 text-white border-white/20 hover:bg-white/20 text-[11px] py-1 px-2.5"
+                  />
+                </div>
+                <div className="font-mono text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-wrap select-all">
+                  {lancamento.descricao}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -313,6 +345,37 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
           </div>
         )}
       </section>
+
+      {/* Bloco Dedicado: Discriminação dos Serviços / Observações da Nota Fiscal */}
+      {lancamento.descricao && (
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-slate-900">
+                  Descrição / Discriminação dos Serviços da Nota Fiscal
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Texto formatado com as quebras de linha originais preservadas para emissão de nova NFS-e.
+                </p>
+              </div>
+            </div>
+
+            <CopyDescricaoButton
+              text={lancamento.descricao}
+              label="Copiar Texto da Nota (Formatado)"
+              variant="primary"
+            />
+          </div>
+
+          <div className="relative rounded-2xl border border-slate-200/80 bg-slate-50/70 p-5 font-mono text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap select-all">
+            {lancamento.descricao}
+          </div>
+        </section>
+      )}
 
       {/* Grade de Parcelas do PI / Campanha (se houver múltiplas) */}
       {parcelas.length > 1 && (

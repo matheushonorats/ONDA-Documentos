@@ -2,6 +2,8 @@ import { Eye, FileText, Radio, UploadCloud, AlertTriangle, Calendar, Layers } fr
 import Link from 'next/link';
 import { Lancamento, Cliente, Colaborador, Documento, Agencia, Veiculo } from '@/generated/prisma';
 import { TickerText } from '@/components/TickerText';
+import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
+import { CopyCnpj } from '@/components/CopyCnpj';
 
 type Item = Lancamento & {
   cliente: Cliente | null;
@@ -96,11 +98,20 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
                     )}
                   </div>
 
-                  <Link href={`/lancamento/${item.id}`} className="block mt-1.5">
-                    <h2 className="truncate font-black text-slate-900 text-base hover:text-indigo-600 transition-colors">
-                      {owner(item) || 'Sem identificação'}
-                    </h2>
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <Link href={`/lancamento/${item.id}`} className="block">
+                      <h2 className="truncate font-black text-slate-900 text-base hover:text-indigo-600 transition-colors">
+                        {owner(item) || 'Sem identificação'}
+                      </h2>
+                    </Link>
+                    {(isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj) && (
+                      <CopyCnpj
+                        cnpj={isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj}
+                        variant="badge"
+                        className="text-[10px] py-0.5 px-1.5"
+                      />
+                    )}
+                  </div>
 
                   {item.agencia && (
                     <p className="truncate text-xs font-semibold text-indigo-600">
@@ -108,7 +119,16 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
                     </p>
                   )}
 
-                  <TickerText text={item.descricao || 'Sem descrição'} className="mt-0.5 text-xs text-slate-500" />
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <TickerText text={item.descricao || 'Sem descrição'} className="text-xs text-slate-500" />
+                    {item.descricao && (
+                      <CopyDescricaoButton
+                        text={item.descricao}
+                        variant="icon"
+                        className="p-1 h-5 w-5 shrink-0 opacity-70 hover:opacity-100"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div className="text-right shrink-0">
@@ -215,18 +235,36 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
 
                     {/* Col 2: Cliente/Fornecedor */}
                     <td className="max-w-xs px-5 py-4">
-                      <Link
-                        href={`/lancamento/${item.id}`}
-                        className="truncate text-sm font-black text-slate-900 hover:text-indigo-600 transition-colors block"
-                      >
-                        {owner(item) || 'Sem identificação'}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/lancamento/${item.id}`}
+                          className="truncate text-sm font-black text-slate-900 hover:text-indigo-600 transition-colors block"
+                        >
+                          {owner(item) || 'Sem identificação'}
+                        </Link>
+                        {(isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj) && (
+                          <CopyCnpj
+                            cnpj={isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj}
+                            variant="badge"
+                            className="text-[10px] py-0.5 px-1.5"
+                          />
+                        )}
+                      </div>
                       {item.agencia && (
                         <p className="truncate text-xs font-semibold text-indigo-600 mt-0.5">
                           Ag: {item.agencia.nome}
                         </p>
                       )}
-                      <TickerText text={item.descricao || 'Sem descrição'} className="mt-0.5 text-xs text-slate-500" />
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <TickerText text={item.descricao || 'Sem descrição'} className="text-xs text-slate-500" />
+                        {item.descricao && (
+                          <CopyDescricaoButton
+                            text={item.descricao}
+                            variant="icon"
+                            className="p-1 h-5 w-5 shrink-0 opacity-70 hover:opacity-100"
+                          />
+                        )}
+                      </div>
                     </td>
 
                     {/* Col 3: Veículo / Campanha */}

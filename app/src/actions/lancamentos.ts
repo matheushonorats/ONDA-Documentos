@@ -693,4 +693,175 @@ export async function sincronizarDocumentosPI() {
   }
 }
 
+export interface LancamentoSimilarInfo {
+  id: string;
+  appSheetId: string | null;
+  tipoLancamento: string;
+  ownerNome: string;
+  numeroNotaFiscal: string | null;
+  numeroPi: string | null;
+  veiculoNome: string | null;
+  valor: number | null;
+  vencimento: string | null;
+  mesAnoReferencia: string | null;
+  createdAt: string;
+}
+
+/**
+ * Verifica se já existe um lançamento com dados similares no sistema
+ * para alertar o usuário e prevenir cadastros duplicados acidentais.
+ */
+export async function verificarLancamentoSimilar(params: {
+  tipoLancamento: string;
+  clienteId?: string;
+  colaboradorId?: string;
+  numeroNotaFiscal?: string;
+  numeroPi?: string;
+  veiculoId?: string;
+  valor?: number | string;
+  vencimento?: string;
+  mesAnoReferencia?: string;
+  currentId?: string;
+}): Promise<{ found: boolean; motivo?: string; similar?: LancamentoSimilarInfo }> {
+  try {
+    const { tipoLancamento, clienteId, colaboradorId, numeroNotaFiscal, numeroPi, valor, vencimento, mesAnoReferencia, currentId } = params;
+
+    const notCurrent = currentId ? { id: { not: currentId } } : {};
+
+    // 1. Verificação por Número de Nota Fiscal (critério mais forte)
+    const nfLimpa = (numeroNotaFiscal || '').trim();
+    if (nfLimpa) {
+      const matchNf = await db.lancamento.findFirst({
+        where: {
+          numeroNotaFiscal: nfLimpa,
+          tipoLancamento,
+          ...notCurrent,
+        },
+        include: { cliente: true, colaborador: true, veiculo: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (matchNf) {
+        const owner = matchNf.tipoLancamento === 'RECEITA'
+          ? matchNf.cliente?.nomeFantasia || matchNf.cliente?.razaoSocial || 'Cliente'
+          : matchNf.colaborador?.nome || 'Fornecedor';
+
+        return {
+          found: true,
+          motivo: `Já existe um lançamento cadastrado com a mesma Nota Fiscal (NF nº ${nfLimpa}) para "${owner}".`,
+          similar: {
+            id: matchNf.id,
+            appSheetId: matchNf.appSheetId,
+            tipoLancamento: matchNf.tipoLancamento,
+            ownerNome: owner,
+            numeroNotaFiscal: matchNf.numeroNotaFiscal,
+            numeroPi: matchNf.numeroPi,
+            veiculoNome: matchNf.veiculo?.nome || null,
+            valor: matchNf.valor,
+            vencimento: matchNf.vencimento ? matchNf.vencimento.toISOString() : null,
+            mesAnoReferencia: matchNf.mesAnoReferencia,
+            createdAt: matchNf.createdAt.toISOString(),
+          },
+        };
+      }
+    }
+
+    // 2. Verificação por PI + Mês de Referência para o mesmo cliente
+    const piLimpo = (numeroPi || '').trim();
+    if (piLimpo && piLimpo !== '-' && (clienteId || colaboradorId) && mesAnoReferencia?.trim()) {
+      const matchPi = await db.lancamento.findFirst({
+        where: {
+          numeroPi: piLimpo,
+          mesAnoReferencia: mesAnoReferencia.trim(),
+          ...(clienteId ? { clienteId } : { colaboradorId }),
+          ...notCurrent,
+        },
+        include: { cliente: true, colaborador: true, veiculo: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (matchPi) {
+        const owner = matchPi.tipoLancamento === 'RECEITA'
+          ? matchPi.cliente?.nomeFantasia || matchPi.cliente?.razaoSocial || 'Cliente'
+          : matchPi.colaborador?.nome || 'Fornecedor';
+
+        return {
+          found: true,
+          motivo: `Já existe um lançamento cadastrado com o mesmo PI (${piLimpo}) e Mês de Referência (${mesAnoReferencia}) para "${owner}".`,
+          similar: {
+            id: matchPi.id,
+            appSheetId: matchPi.appSheetId,
+            tipoLancamento: matchPi.tipoLancamento,
+            ownerNome: owner,
+            numeroNotaFiscal: matchPi.numeroNotaFiscal,
+            numeroPi: matchPi.numeroPi,
+            veiculoNome: matchPi.veiculo?.nome || null,
+            valor: matchPi.valor,
+            vencimento: matchPi.vencimento ? matchPi.vencimento.toISOString() : null,
+            mesAnoReferencia: matchPi.mesAnoReferencia,
+            createdAt: matchPi.createdAt.toISOString(),
+          },
+        };
+      }
+    }
+
+    // 3. Verificação por mesmo Cliente + mesmo Valor + mesmo Vencimento
+    let parsedValor: number | null = null;
+    if (typeof valor === 'number') parsedValor = valor;
+    else if (typeof valor === 'string' && valor.trim()) {
+      parsedValor = parseNumber(valor);
+    }
+
+    if ((clienteId || colaboradorId) && parsedValor && vencimento?.trim()) {
+      const dataVenc = new Date(vencimento.trim());
+      if (!isNaN(dataVenc.getTime())) {
+        const startOfDay = new Date(dataVenc);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(dataVenc);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const matchValor = await db.lancamento.findFirst({
+          where: {
+            ...(clienteId ? { clienteId } : { colaboradorId }),
+            valor: parsedValor,
+            vencimento: { gte: startOfDay, lte: endOfDay },
+            ...notCurrent,
+          },
+          include: { cliente: true, colaborador: true, veiculo: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (matchValor) {
+          const owner = matchValor.tipoLancamento === 'RECEITA'
+            ? matchValor.cliente?.nomeFantasia || matchValor.cliente?.razaoSocial || 'Cliente'
+            : matchValor.colaborador?.nome || 'Fornecedor';
+
+          return {
+            found: true,
+            motivo: `Já existe um lançamento similar para "${owner}" com o mesmo Valor (R$ ${parsedValor.toFixed(2).replace('.', ',')}) e Vencimento (${vencimento}).`,
+            similar: {
+              id: matchValor.id,
+              appSheetId: matchValor.appSheetId,
+              tipoLancamento: matchValor.tipoLancamento,
+              ownerNome: owner,
+              numeroNotaFiscal: matchValor.numeroNotaFiscal,
+              numeroPi: matchValor.numeroPi,
+              veiculoNome: matchValor.veiculo?.nome || null,
+              valor: matchValor.valor,
+              vencimento: matchValor.vencimento ? matchValor.vencimento.toISOString() : null,
+              mesAnoReferencia: matchValor.mesAnoReferencia,
+              createdAt: matchValor.createdAt.toISOString(),
+            },
+          };
+        }
+      }
+    }
+
+    return { found: false };
+  } catch (err) {
+    console.error('Erro ao verificar lançamento similar:', err);
+    return { found: false };
+  }
+}
+
 

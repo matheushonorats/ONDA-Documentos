@@ -22,9 +22,11 @@ import {
   Check,
   FileUp,
   FileCheck2,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
-import { createLancamento } from '@/actions/lancamentos';
+import { createLancamento, verificarLancamentoSimilar, type LancamentoSimilarInfo } from '@/actions/lancamentos';
 import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
 import { adicionarCobranca } from '@/actions/cobrancas';
 import type { ExtracaoNfeResult } from '@/lib/nfParser';
@@ -163,17 +165,6 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   // Integração com Planilha Semanal de Cobranças de Agência
   const [enviarParaCobrancaAgencia, setEnviarParaCobrancaAgencia] = useState(false);
 
-  // Fechar dropdown ao clicar fora
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(event.target as Node)) {
-        setClienteDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   // Estados do Preenchimento Automático por NF (PDF / Link)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autoNfModo, setAutoNfModo] = useState<'ARQUIVO' | 'LINK'>('ARQUIVO');
@@ -200,6 +191,100 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       mesRef?: string;
     };
   } | null>(null);
+
+  // Alerta de Lançamento Duplicado / Similar
+  const [similarWarning, setSimilarWarning] = useState<{ motivo: string; similar: LancamentoSimilarInfo } | null>(null);
+  const [ignorarSimilar, setIgnorarSimilar] = useState(false);
+  const [isCheckingSimilar, setIsCheckingSimilar] = useState(false);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(event.target as Node)) {
+        setClienteDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Hook com debounce para verificar lançamentos similares
+  useEffect(() => {
+    // Se o usuário já optou por ignorar este aviso ou se não há dados mínimos, não checa
+    const nfLimpa = numeroNotaFiscal.trim();
+    const piLimpo = numeroPi.trim();
+    const mesRefLimpo = mesAnoReferencia.trim();
+    const valorNum = parseFloat(valor);
+    const vencLimpo = vencimento.trim();
+
+    // Determinar ID do cliente/colaborador selecionado
+    let currentClienteId = autoClienteId;
+    if (!currentClienteId && !novoRegistro && tipoLancamento === 'RECEITA' && buscaPessoa.trim()) {
+      const q = buscaPessoa.trim().toLowerCase();
+      const match = clientes.find(c => 
+        (c.nomeFantasia && c.nomeFantasia.toLowerCase() === q) ||
+        c.razaoSocial.toLowerCase() === q
+      );
+      if (match) currentClienteId = match.id;
+    }
+
+    let currentColaboradorId: string | null = null;
+    if (!novoRegistro && tipoLancamento === 'DESPESA' && buscaPessoa.trim()) {
+      const q = buscaPessoa.trim().toLowerCase();
+      const match = colaboradores.find(c => c.nome.toLowerCase() === q);
+      if (match) currentColaboradorId = match.id;
+    }
+
+    // Pelo menos um critério deve estar presente: NF OU PI com Mês de Ref OU (Cliente/Colab + Valor + Vencimento)
+    const hasNf = nfLimpa.length > 0;
+    const hasPiComRef = piLimpo.length > 0 && mesRefLimpo.length > 0;
+    const hasValorEVenc = (Boolean(currentClienteId) || Boolean(currentColaboradorId)) && !isNaN(valorNum) && valorNum > 0 && vencLimpo.length > 0;
+
+    if (!hasNf && !hasPiComRef && !hasValorEVenc) {
+      setSimilarWarning(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsCheckingSimilar(true);
+        const res = await verificarLancamentoSimilar({
+          tipoLancamento,
+          clienteId: currentClienteId || undefined,
+          colaboradorId: currentColaboradorId || undefined,
+          numeroNotaFiscal: nfLimpa || undefined,
+          numeroPi: piLimpo || undefined,
+          mesAnoReferencia: mesRefLimpo || undefined,
+          valor: !isNaN(valorNum) && valorNum > 0 ? valorNum : undefined,
+          vencimento: vencLimpo || undefined,
+        });
+
+        if (res.found && res.similar && res.motivo) {
+          setSimilarWarning({ motivo: res.motivo, similar: res.similar });
+        } else {
+          setSimilarWarning(null);
+        }
+      } catch (e) {
+        console.error('Erro na checagem de similaridade:', e);
+      } finally {
+        setIsCheckingSimilar(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    tipoLancamento,
+    autoClienteId,
+    novoRegistro,
+    buscaPessoa,
+    numeroNotaFiscal,
+    numeroPi,
+    mesAnoReferencia,
+    valor,
+    vencimento,
+    clientes,
+    colaboradores
+  ]);
 
   const aplicarDadosExtraidos = (dados: NonNullable<ExtracaoNfeResult['dados']>, uploadedFile?: File) => {
     // 1. Tipo do Lançamento: NFS-e da rádio é sempre Receita de Cliente
@@ -1605,6 +1690,76 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
           />
         </div>
       </div>
+
+      {/* Alerta de Lançamento Duplicado / Similar */}
+      {similarWarning && !ignorarSimilar && (
+        <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-5 sm:p-6 shadow-sm transition-all animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-amber-950">
+                    Aviso: Possível Lançamento Duplicado / Já Cadastrado
+                  </h3>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                    Atenção
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-amber-900 leading-relaxed">
+                  {similarWarning.motivo}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-amber-800">
+                  {similarWarning.similar.numeroNotaFiscal && (
+                    <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                      NF: <strong>{similarWarning.similar.numeroNotaFiscal}</strong>
+                    </span>
+                  )}
+                  {similarWarning.similar.numeroPi && (
+                    <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                      PI: <strong>{similarWarning.similar.numeroPi}</strong>
+                    </span>
+                  )}
+                  {similarWarning.similar.mesAnoReferencia && (
+                    <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                      Ref: <strong>{similarWarning.similar.mesAnoReferencia}</strong>
+                    </span>
+                  )}
+                  <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                    Valor: <strong>{similarWarning.similar.valor != null ? similarWarning.similar.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</strong>
+                  </span>
+                  {similarWarning.similar.vencimento && (
+                    <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                      Vencimento: <strong>{new Date(similarWarning.similar.vencimento).toLocaleDateString('pt-BR')}</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center sm:flex-col gap-2 shrink-0 self-end sm:self-start">
+              <a
+                href={`/lancamento/${similarWarning.similar.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-amber-100/50 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs shadow-2xs transition-all hover:shadow-xs"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-amber-700" />
+                Ver Lançamento Existente
+              </a>
+              <button
+                type="button"
+                onClick={() => setIgnorarSimilar(true)}
+                className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2 transition"
+              >
+                Ignorar e prosseguir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Barra de Ação Final */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
