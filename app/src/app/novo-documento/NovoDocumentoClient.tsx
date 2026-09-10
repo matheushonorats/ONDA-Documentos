@@ -102,9 +102,12 @@ export function NovoDocumentoClient({
     setLoading(true);
     setError(null);
     let sucessoTotal = true;
+    const arquivosRestantes: File[] = [];
+    const tiposRestantes: string[] = [];
+    const novosTiposRestantes: string[] = [];
 
     for (let i = 0; i < arquivos.length; i++) {
-      setProgresso(`Enviando documento ${i + 1} de ${arquivos.length}...`);
+      setProgresso(`Enviando documento ${i + 1} de ${arquivos.length} (${arquivos[i].name})...`);
       const file = arquivos[i];
       const formData = new FormData();
       
@@ -117,10 +120,27 @@ export function NovoDocumentoClient({
       formData.append('arquivosMeta', JSON.stringify(arquivosMeta));
       formData.append('file_0', file);
 
-      const res = await adicionarDocumentos(lancamento.id, formData);
-      if (!res.success) {
-        setError(res.error || `Erro ao enviar o documento: ${file.name}`);
+      try {
+        const res = await adicionarDocumentos(lancamento.id, formData);
+        if (!res.success) {
+          setError(res.error || `Erro ao enviar o documento: ${file.name}`);
+          sucessoTotal = false;
+          // Guarda os que ainda faltam
+          for (let j = i; j < arquivos.length; j++) {
+            arquivosRestantes.push(arquivos[j]);
+            tiposRestantes.push(tiposSelecionados[j]);
+            novosTiposRestantes.push(novosTiposTexto[j]);
+          }
+          break;
+        }
+      } catch (uploadErr: any) {
+        setError(uploadErr?.message || `Falha de conexão ao enviar ${file.name}.`);
         sucessoTotal = false;
+        for (let j = i; j < arquivos.length; j++) {
+          arquivosRestantes.push(arquivos[j]);
+          tiposRestantes.push(tiposSelecionados[j]);
+          novosTiposRestantes.push(novosTiposTexto[j]);
+        }
         break;
       }
     }
@@ -130,6 +150,10 @@ export function NovoDocumentoClient({
 
     if (sucessoTotal) {
       router.push(`/lancamento/${lancamento.id}`);
+    } else {
+      setArquivos(arquivosRestantes);
+      setTiposSelecionados(tiposRestantes);
+      setNovosTiposTexto(novosTiposRestantes);
     }
   };
 

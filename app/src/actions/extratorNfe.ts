@@ -98,46 +98,74 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
 
     const tomadorCnpjDigits = cleanDigits(parsed.tomadorCnpj);
 
-    // 1.1 Match prioritário e absoluto por CNPJ completo
+    // 1.1 Match prioritário e absoluto por CNPJ completo (14 dígitos)
     let matchedCliente = tomadorCnpjDigits && tomadorCnpjDigits.length >= 14
       ? allClientes.find(c => cleanDigits(c.cnpj) === tomadorCnpjDigits)
       : null;
 
-    // 1.2 Match por raiz do CNPJ (8 primeiros dígitos - mesma empresa/matriz/filial)
+    // 1.2 Match por raiz do CNPJ (8 primeiros dígitos - mesma matriz/filial ou mesma entidade pública)
     if (!matchedCliente && tomadorCnpjDigits && tomadorCnpjDigits.length >= 8) {
       const raizCnpj = tomadorCnpjDigits.slice(0, 8);
+      // Se tiver cidade do tomador, prioriza a mesma cidade
+      const tomadorCidadeNorm = parsed.tomadorCidade ? norm(parsed.tomadorCidade) : '';
       matchedCliente = allClientes.find(c => {
         const cDigits = cleanDigits(c.cnpj);
-        return cDigits.length >= 8 && cDigits.startsWith(raizCnpj);
+        const matchesRaiz = cDigits.length >= 8 && cDigits.startsWith(raizCnpj);
+        if (!matchesRaiz) return false;
+        if (tomadorCidadeNorm && c.cidade) {
+          return norm(c.cidade).includes(tomadorCidadeNorm) || tomadorCidadeNorm.includes(norm(c.cidade));
+        }
+        return true;
       }) || null;
     }
 
-    // 1.3 Match por Razão Social ou Nome Fantasia normalizado
+    // 1.3 Se a nota fiscal tem CNPJ explícito mas não achou no cadastro por CNPJ, NUNCA associar a outro cliente com CNPJ diferente!
+    // Apenas busca por nome se o cliente cadastrado NÃO tiver CNPJ (para não misturar prefeituras/empresas com CNPJs distintos)
     if (!matchedCliente && parsed.tomadorNome) {
       const tNorm = norm(parsed.tomadorNome);
-      const tWords = tNorm.split(/\s+/).filter(w => w.length > 2 && !['ltda', 'epp', 'me', 'eireli', 'sa', 's/a'].includes(w));
+      const tWords = tNorm.split(/\s+/).filter(w => w.length > 2 && !['ltda', 'epp', 'me', 'eireli', 'sa', 's/a', 'de', 'do', 'da'].includes(w));
+      const tomadorCidadeNorm = parsed.tomadorCidade ? norm(parsed.tomadorCidade) : '';
 
-      // Busca exata ou por contenção
-      matchedCliente =
-        allClientes.find(c => {
+      // Filtra apenas clientes elegíveis: se a nota tem CNPJ, não pode bater em cliente que já tem um CNPJ diferente
+      const clientesCandidatos = allClientes.filter(c => {
+        const cDigits = cleanDigits(c.cnpj);
+        if (tomadorCnpjDigits && cDigits && cDigits !== tomadorCnpjDigits) {
+          return false; // CNPJ incompatível! Jamais associar!
+        }
+        return true;
+      });
+
+      // Busca exata ou com filtro de cidade
+      matchedCliente = clientesCandidatos.find(c => {
+        const rNorm = norm(c.razaoSocial);
+        const fNorm = c.nomeFantasia ? norm(c.nomeFantasia) : '';
+        const nameMatch = rNorm === tNorm || fNorm === tNorm;
+        if (nameMatch) {
+          if (tomadorCidadeNorm && c.cidade) {
+            return norm(c.cidade).includes(tomadorCidadeNorm) || tomadorCidadeNorm.includes(norm(c.cidade));
+          }
+          return true;
+        }
+        return false;
+      }) || null;
+
+      // Se ainda não achou, busca contenção com exigência de cidade idêntica se ambas existirem
+      if (!matchedCliente) {
+        matchedCliente = clientesCandidatos.find(c => {
           const rNorm = norm(c.razaoSocial);
           const fNorm = c.nomeFantasia ? norm(c.nomeFantasia) : '';
-          return (
-            rNorm === tNorm ||
-            (fNorm && fNorm === tNorm) ||
-            rNorm.includes(tNorm) ||
-            tNorm.includes(rNorm) ||
-            (fNorm && (fNorm.includes(tNorm) || tNorm.includes(fNorm)))
-          );
-        }) || null;
-
-      // Busca por palavras-chave significativas se ainda não encontrou
-      if (!matchedCliente && tWords.length > 0) {
-        matchedCliente = allClientes.find(c => {
-          const combined = `${norm(c.razaoSocial)} ${c.nomeFantasia ? norm(c.nomeFantasia) : ''}`;
-          // Se pelo menos as palavras principais coincidem
-          const matchCount = tWords.filter(w => combined.includes(w)).length;
-          return matchCount >= Math.min(tWords.length, 2);
+          const contains = rNorm.includes(tNorm) || tNorm.includes(rNorm) || (fNorm && (fNorm.includes(tNorm) || tNorm.includes(fNorm)));
+          if (contains) {
+            if (tomadorCidadeNorm && c.cidade) {
+              return norm(c.cidade).includes(tomadorCidadeNorm) || tomadorCidadeNorm.includes(norm(c.cidade));
+            }
+            // Se for órgão genérico como 'SECRETARIA DE COMUNICACAO', exige cidade
+            if (tNorm.includes('secretaria') || tNorm.includes('prefeitura') || tNorm.includes('camara')) {
+              return false;
+            }
+            return true;
+          }
+          return false;
         }) || null;
       }
     }

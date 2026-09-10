@@ -176,8 +176,11 @@ export function parseNfseTextContent(text: string) {
   if (tomadorSection) {
     const tomadorText = tomadorSection[1];
 
-    // CNPJ: XX.XXX.XXX/XXXX-XX
-    const cnpjMatch = tomadorText.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2})/);
+    // CNPJ: XX.XXX.XXX/XXXX-XX ou 14 dígitos diretos
+    const cnpjMatch =
+      tomadorText.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2})/) ||
+      tomadorText.match(/\b(?:CNPJ|CPF\/CNPJ|DOC)[:\s]*(\d{14})\b/i) ||
+      tomadorText.match(/\b(\d{14})\b/);
     if (cnpjMatch) {
       result.tomadorCnpj = cnpjMatch[1];
     }

@@ -349,6 +349,50 @@ export async function atualizarNovaData(
 }
 
 /**
+ * Atualiza o(s) e-mail(s) de cobrança de um contrato específico na planilha Google Sheets.
+ */
+export async function atualizarEmailCobranca(
+  cobrancaNo: string,
+  pi: string,
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const row = await findRowByCobrancaNo(cobrancaNo, pi);
+    if (!row) {
+      return { success: false, error: `Contrato não localizado na planilha (Cobrança #${cobrancaNo}, PI ${pi}).` };
+    }
+    await updateCell(row, COLS.EMAIL, email.trim());
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar e-mail de cobrança:', error);
+    return { success: false, error: error?.message || 'Erro ao comunicar com Google Sheets.' };
+  }
+}
+
+/**
+ * Atualiza os e-mails de cobrança para TODOS os contratos de uma agência na planilha Google Sheets.
+ */
+export async function atualizarEmailsAgencia(
+  debts: { cobrancaNo: string; pi: string }[],
+  novosEmails: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    for (const d of debts) {
+      const row = await findRowByCobrancaNo(d.cobrancaNo, d.pi);
+      if (row) {
+        await updateCell(row, COLS.EMAIL, novosEmails.trim());
+      }
+    }
+    await revalidateCobrancasCache();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Erro ao atualizar e-mails da agência:', error);
+    return { success: false, error: error?.message || 'Erro ao atualizar planilha.' };
+  }
+}
+
+/**
  * Atualiza a observação de um contrato na planilha Google Sheets.
  */
 export async function atualizarObs(

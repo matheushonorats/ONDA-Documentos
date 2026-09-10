@@ -28,6 +28,7 @@ import {
   Loader2,
   Undo2,
   Link2,
+  Pencil,
 } from 'lucide-react';
 import {
   CobrancasDataResponse,
@@ -46,6 +47,8 @@ import {
   atualizarLink,
   atualizarUltimaCobranca,
   registrarEnvioCobrancaAgencia,
+  atualizarEmailCobranca,
+  atualizarEmailsAgencia,
 } from '@/actions/cobrancas';
 import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
 import { EmailPreviewModal } from './EmailPreviewModal';
@@ -231,6 +234,50 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
       setUpdatingKey(null);
     }
   }
+
+  // Configurar/Editar e-mails de uma agência inteira (grava na planilha para todos os contratos dela)
+  async function handleEditEmailsAgencia(grupo: AgenciaGrupo) {
+    const emailsAtuais = grupo.emailsFormatados || '';
+    const novos = prompt(
+      `Informe os e-mails de cobrança para ${grupo.agencia} (separe múltiplos por vírgula):`,
+      emailsAtuais
+    );
+    if (novos === null) return;
+    if (novos.trim() === emailsAtuais.trim()) return;
+
+    setUpdatingKey(grupo.agencia);
+    try {
+      const debts = grupo.debts.map(d => ({ cobrancaNo: d.cobrancaNo, pi: d.pi }));
+      await atualizarEmailsAgencia(debts, novos.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar e-mails da agência:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
+  // Configurar/Editar e-mail de um contrato específico
+  async function handleEditEmailContrato(item: ContratoCompleto) {
+    const novo = prompt(
+      `Informe o(s) e-mail(s) de cobrança para o PI ${item.pi} da agência ${item.agencia}:`,
+      item.email || ''
+    );
+    if (novo === null) return;
+    if (novo.trim() === (item.email || '').trim()) return;
+
+    const key = `${item.cobrancaNo}-${item.pi}`;
+    setUpdatingKey(key);
+    try {
+      await atualizarEmailCobranca(item.cobrancaNo, item.pi, novo.trim());
+      handleSync();
+    } catch (err) {
+      console.error('Erro ao atualizar e-mail do contrato:', err);
+    } finally {
+      setUpdatingKey(null);
+    }
+  }
+
 
 
   // Copia resumo de PIs de uma agência com suporte resiliente a navegadores
@@ -603,15 +650,31 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                           {/* Recipient Emails */}
                           <div className="flex flex-wrap items-center gap-1.5 pt-1">
                             <span className="text-[11px] font-bold text-slate-400">E-mails de Contato:</span>
-                            {grupo.emails.map((email, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 border border-slate-200"
-                              >
-                                <Mail className="h-3 w-3 text-slate-400" />
-                                {email}
+                            {grupo.emails.length > 0 ? (
+                              grupo.emails.map((email, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 border border-slate-200"
+                                >
+                                  <Mail className="h-3 w-3 text-slate-400" />
+                                  {email}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                                ⚠️ Nenhum e-mail configurado
                               </span>
-                            ))}
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleEditEmailsAgencia(grupo)}
+                              disabled={updatingKey === grupo.agencia}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer ml-1"
+                              title="Configurar ou alterar os e-mails desta agência na planilha"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              {grupo.emails.length > 0 ? 'Editar E-mails' : '+ Adicionar E-mails'}
+                            </button>
                           </div>
                         </div>
 
@@ -952,8 +1015,19 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                               </span>
                             )}
                           </td>
-                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600 max-w-xs truncate" title={item.email}>
-                            {item.email || '—'}
+                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600 max-w-xs">
+                            <div className="flex items-center gap-1">
+                              <span className="truncate" title={item.email || 'Nenhum e-mail'}>{item.email || '—'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleEditEmailContrato(item)}
+                                disabled={isRowUpdating}
+                                className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition shrink-0"
+                                title="Configurar ou alterar e-mail na planilha"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3.5 py-2.5 text-slate-600">
                             <div className="flex items-center gap-1">
