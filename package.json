@@ -1,0 +1,11 @@
+﻿{
+  "name": "onda-documentos-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "vercel-build": "npm --prefix app run vercel-build",
+    "postinstall": "npm --prefix app run postinstall"
+  }
+}
