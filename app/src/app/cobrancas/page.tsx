@@ -2,6 +2,7 @@ import { getCobrancasData } from '@/actions/cobrancas';
 import { CobrancasClient } from './CobrancasClient';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export const metadata = {
   title: 'Cobrança de Agências | Ondas Documentos',
@@ -9,7 +10,7 @@ export const metadata = {
 };
 
 export default async function CobrancasPage() {
-  const data = await getCobrancasData();
+  const data = await getCobrancasData(true);
 
   return <CobrancasClient initialData={data} />;
 }

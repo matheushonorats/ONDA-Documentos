@@ -39,12 +39,9 @@ export type {
  * Obtém os dados ao vivo da planilha de cobrança semanal do Google Sheets,
  * processa e agrupa de acordo com as regras de negócio da Ondas 985.
  */
-export async function getCobrancasData(bypassCache = false): Promise<CobrancasDataResponse> {
-  const fetchOptions: RequestInit = bypassCache
-    ? { cache: 'no-store' }
-    : { next: { revalidate: 300 } };
-
-  const res = await fetch(SPREADSHEET_CSV_URL, fetchOptions);
+export async function getCobrancasData(bypassCache = true): Promise<CobrancasDataResponse> {
+  const urlWithCacheBuster = `${SPREADSHEET_CSV_URL}&_t=${Date.now()}`;
+  const res = await fetch(urlWithCacheBuster, { cache: 'no-store' });
 
   if (!res.ok) {
     throw new Error(`Falha ao carregar a planilha do Google Sheets: ${res.status} ${res.statusText}`);
