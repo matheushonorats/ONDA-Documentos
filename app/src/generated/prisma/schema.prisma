@@ -1,0 +1,173 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Cliente {
+  id              String       @id @default(uuid())
+  legacyId        String?      @unique
+  nomeFantasia    String?
+  razaoSocial     String
+  cnpj            String?
+  cidade          String?
+  tipificacao     String?
+  dadosCadastrais String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  lancamentos     Lancamento[]
+}
+
+model Agencia {
+  id          String       @id @default(uuid())
+  nome        String
+  cnpj        String?
+  contatos    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  lancamentos Lancamento[]
+}
+
+model Veiculo {
+  id            String       @id @default(uuid())
+  nome          String       @unique
+  identificacao String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  lancamentos   Lancamento[]
+}
+
+model Colaborador {
+  id          String       @id @default(uuid())
+  legacyId    String?      @unique
+  nome        String
+  cpfCnpj     String?
+  cargo       String?
+  tipificacao String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  lancamentos Lancamento[]
+}
+
+model Lancamento {
+  id         String  @id @default(uuid())
+  appSheetId String? @unique
+
+  // Define se é RECEITA (Contas a Receber) ou DESPESA (Contas a Pagar)
+  tipoLancamento String @default("RECEITA")
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  agenciaId String?
+  agencia   Agencia? @relation(fields: [agenciaId], references: [id])
+
+  veiculoId String?
+  veiculo   Veiculo? @relation(fields: [veiculoId], references: [id])
+
+  colaboradorId String?
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+
+  // Campos principais
+  numeroNotaFiscal String?
+  dataEmissao      DateTime?
+  valor            Float?
+  vencimento       DateTime?
+  descricao        String?
+
+  // Campos complementares
+  numeroPi         String?
+  numeroContrato   String?
+  mesAnoReferencia String?
+
+  // Campos de Controle legados da Planilha (Retrocompatibilidade)
+  statusPagto    String?
+  statusCobranca String?
+  statusNfe      String?
+  dataEnvio      DateTime?
+  valorPagto     Float?
+  dataPagamento  DateTime?
+  dataEnvioNfe   DateTime?
+  canalCobranca  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documentos Documento[]
+  marcacoes  MarcacaoComplementacao[]
+  historico  HistoricoLancamento[]
+
+  @@index([tipoLancamento, updatedAt])
+  @@index([numeroNotaFiscal])
+  @@index([clienteId])
+  @@index([colaboradorId])
+  @@index([veiculoId])
+}
+
+model TipoDocumento {
+  id         String      @id @default(uuid())
+  nome       String      @unique // ex: 'Nota Fiscal', 'Cobrança', 'Censura/Áudio'
+  icone      String?
+  documentos Documento[]
+}
+
+model Documento {
+  id String @id @default(uuid())
+
+  lancamentoId String
+  lancamento   Lancamento @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+
+  tipoDocumentoId String
+  tipoDocumento   TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
+
+  caminhoOriginal String?
+  nomeOriginal    String
+  colunaOrigem    String?
+  planilhaOrigem  String?
+  tamanhoBytes    Int     @default(0)
+
+  dataDocumento      DateTime?
+  dataInclusao       DateTime  @default(now())
+  observacao         String?
+  usuarioResponsavel String?
+
+  urlPublica  String?
+  deletarApos DateTime?
+  status      String    @default("ATIVO") // ATIVO, CANCELADO
+
+  @@index([lancamentoId, dataInclusao])
+  @@index([nomeOriginal])
+}
+
+model HistoricoLancamento {
+  id           String     @id @default(uuid())
+  lancamentoId String
+  lancamento   Lancamento @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+
+  acao      String // 'CRIACAO', 'EDICAO_DADOS', 'INCLUSAO_DOCUMENTO', 'EDICAO_DOCUMENTO', 'EXCLUSAO_DOCUMENTO', 'STATUS_DOCUMENTO'
+  descricao String // Descrição clara do que foi alterado
+  detalhes  String? // Detalhes adicionais (ex: campo X de 'A' para 'B')
+  usuario   String?  @default("Sistema")
+  createdAt DateTime @default(now())
+
+  @@index([lancamentoId, createdAt])
+}
+
+model MarcacaoComplementacao {
+  id String @id @default(uuid())
+
+  lancamentoId String
+  lancamento   Lancamento @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+
+  tipoDocumentoEsperado String
+  situacao              String  @default("PENDENTE")
+  observacao            String?
+}
