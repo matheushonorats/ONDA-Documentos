@@ -11,3 +11,7 @@ app/prisma/backups/
 app/prisma/seed_data.json
 app/dev.db
 app/prisma/dev.db
+node_modules/
+.next/
+.vercel/
+*.log
