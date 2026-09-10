@@ -1,7 +1,29 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 
+function getFormattedPrivateKey(): string | undefined {
+  let pk = process.env.GOOGLE_PRIVATE_KEY;
+  if (!pk) return undefined;
+  if (pk.startsWith('"') && pk.endsWith('"')) pk = pk.slice(1, -1);
+  pk = pk.replace('7NJ8MUZf7NJ8MUZf', '7NJ8MUZf');
+  return pk.replace(/\\n/g, '\n');
+}
+
 function getAuth() {
+  const privateKey = getFormattedPrivateKey();
+  if (process.env.GOOGLE_CLIENT_EMAIL && privateKey) {
+    return new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: privateKey,
+      },
+      scopes: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive'
+      ],
+    });
+  }
+
   if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -13,16 +35,7 @@ function getAuth() {
     return oauth2Client;
   }
 
-  return new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    scopes: [
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive'
-    ],
-  });
+  throw new Error('Credenciais do Google Drive não configuradas no ambiente.');
 }
 
 export const driveClient = google.drive({

@@ -509,9 +509,9 @@ export async function adicionarCobranca(
       dados.obs?.trim() || '',
       'FALSE',
     ];
-    await appendRow(rowValues);
+    const cobrancaNo = await appendRow(rowValues);
     await revalidateCobrancasCache();
-    return { success: true, cobrancaNo: proximoNumero };
+    return { success: true, cobrancaNo };
   } catch (error: any) {
     console.error('Erro ao adicionar cobrança:', error);
     return { success: false, error: error?.message || 'Erro ao adicionar linha na planilha.' };
