@@ -414,15 +414,31 @@ export function NovoDocumentoClient({
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                   Link / URL da Nota Fiscal Emitida <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={urlLink}
-                  onChange={(e) => setUrlLink(e.target.value)}
-                  placeholder="Ex: https://nfe.prefeitura.sp.gov.br/publico/verificacao?..."
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900"
-                  disabled={loading}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={urlLink}
+                    onChange={(e) => setUrlLink(e.target.value)}
+                    placeholder="Ex: https://nfe.prefeitura.sp.gov.br/publico/verificacao?..."
+                    className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900"
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        setUrlLink(text);
+                      } catch {}
+                    }}
+                    title="Colar da área de transferência"
+                    className="flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 hover:border-indigo-400 hover:text-indigo-700 transition-all"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    Colar
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500 mt-1">Cole aqui o endereço onde a Nota Fiscal foi emitida no sistema da prefeitura/governo.</p>
               </div>
 

@@ -132,10 +132,6 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
-          {cnpjEmpresa && (
-            <CopyCnpj cnpj={cnpjEmpresa} label="Copiar CNPJ" variant="topbar" />
-          )}
-
           <CopyPageLinkButton />
 
           <Link
@@ -342,36 +338,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
         )}
       </section>
 
-      {/* Bloco Dedicado: Discriminação dos Serviços / Observações da Nota Fiscal */}
-      {lancamento.descricao && (
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-black text-slate-900">
-                  Descrição / Discriminação dos Serviços da Nota Fiscal
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Texto formatado com as quebras de linha originais preservadas para emissão de nova NFS-e.
-                </p>
-              </div>
-            </div>
 
-            <CopyDescricaoButton
-              text={lancamento.descricao}
-              label="Copiar Texto da Nota (Formatado)"
-              variant="primary"
-            />
-          </div>
-
-          <div className="relative rounded-2xl border border-slate-200/80 bg-slate-50/70 p-5 font-mono text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap select-all">
-            {lancamento.descricao}
-          </div>
-        </section>
-      )}
 
       {/* Grade de Parcelas do PI / Campanha (se houver múltiplas) */}
       {parcelas.length > 1 && (
