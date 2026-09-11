@@ -1,5 +1,0 @@
-﻿{
-  "buildCommand": "cd app && npx prisma generate && npx next build",
-  "outputDirectory": "app/.next",
-  "installCommand": "cd app && npm install"
-}
