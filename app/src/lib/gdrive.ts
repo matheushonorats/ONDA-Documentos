@@ -10,6 +10,19 @@ function getFormattedPrivateKey(): string | undefined {
 }
 
 function getAuth() {
+  // Drive: usa OAuth2 (conta pessoal) — Service Account não tem cota de armazenamento
+  if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    });
+    return oauth2Client;
+  }
+
+  // Fallback: Service Account (só funciona em Shared Drives)
   const privateKey = getFormattedPrivateKey();
   if (process.env.GOOGLE_CLIENT_EMAIL && privateKey) {
     return new google.auth.GoogleAuth({
@@ -24,19 +37,9 @@ function getAuth() {
     });
   }
 
-  if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
-    oauth2Client.setCredentials({
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-    });
-    return oauth2Client;
-  }
-
   throw new Error('Credenciais do Google Drive não configuradas no ambiente.');
 }
+
 
 export const driveClient = google.drive({
   version: 'v3',
