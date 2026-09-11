@@ -136,10 +136,6 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
             <CopyCnpj cnpj={cnpjEmpresa} label="Copiar CNPJ" variant="topbar" />
           )}
 
-          {lancamento.descricao && (
-            <CopyDescricaoButton text={lancamento.descricao} label="Copiar Texto da Nota" variant="topbar" />
-          )}
-
           <CopyPageLinkButton />
 
           <Link
