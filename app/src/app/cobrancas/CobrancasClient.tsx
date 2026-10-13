@@ -50,7 +50,7 @@ import {
   atualizarEmailCobranca,
   atualizarEmailsAgencia,
 } from '@/actions/cobrancas';
-import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
+import { getVeiculoColor } from '@/lib/veiculo';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { ComprovanteModal } from './ComprovanteModal';
 import { RelatorioGeralModal } from './RelatorioGeralModal';

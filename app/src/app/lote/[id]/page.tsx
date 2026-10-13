@@ -3,7 +3,7 @@ import { getLoteById } from '@/actions/lotes';
 import { LoteActionButtons } from '@/components/LoteActionButtons';
 import { CopyCnpj } from '@/components/CopyCnpj';
 import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
-import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
+import { getVeiculoColor } from '@/lib/veiculo';
 import {
   ArrowLeft,
   ExternalLink,

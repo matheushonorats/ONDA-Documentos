@@ -5,7 +5,7 @@ import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
 import { CopyCnpj } from '@/components/CopyCnpj';
 import { DocumentoCard } from '@/components/DocumentoCard';
 import { HistoricoTimeline } from '@/components/HistoricoTimeline';
-import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
+import { getVeiculoColor } from '@/lib/veiculo';
 import {
   ArrowLeft,
   Building2,

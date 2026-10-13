@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { TickerText } from '@/components/TickerText';
-import { getVeiculoColor } from '@/app/lancamentos/LancamentosTable';
+import { getVeiculoColor } from '@/lib/veiculo';
 
 export const dynamic = 'force-dynamic';
 
