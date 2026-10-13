@@ -3,6 +3,7 @@ import { getColaboradores } from '@/actions/colaboradores';
 import { getAgencias } from '@/actions/agencias';
 import { getTiposDocumento } from '@/actions/documentos';
 import { getVeiculos } from '@/actions/veiculos';
+import { getLotesRecentes } from '@/actions/lotes';
 import { LancamentoForm } from '@/components/LancamentoForm';
 import { ArrowLeft, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
@@ -13,12 +14,13 @@ export default async function NovoLancamentoPage({ searchParams }: { searchParam
   const params = await searchParams;
   const initialTipo = params.tipo === 'DESPESA' ? 'DESPESA' : 'RECEITA';
 
-  const [clientes, colaboradores, agencias, tiposDocumento, veiculos] = await Promise.all([
+  const [clientes, colaboradores, agencias, tiposDocumento, veiculos, lotesRecentes] = await Promise.all([
     getClientes(),
     getColaboradores(),
     getAgencias(),
     getTiposDocumento(),
     getVeiculos(),
+    getLotesRecentes(),
   ]);
 
   return (
@@ -54,6 +56,7 @@ export default async function NovoLancamentoPage({ searchParams }: { searchParam
         agencias={agencias} 
         tiposDocumento={tiposDocumento} 
         veiculos={veiculos}
+        lotesRecentes={lotesRecentes}
       />
     </div>
   );

@@ -105,6 +105,7 @@ model Lancamento {
   documentos Documento[]
   marcacoes  MarcacaoComplementacao[]
   historico  HistoricoLancamento[]
+  loteItens  LoteItem[]
 
   @@index([tipoLancamento, updatedAt])
   @@index([numeroNotaFiscal])
@@ -171,5 +172,32 @@ model MarcacaoComplementacao {
   tipoDocumentoEsperado String
   situacao              String  @default("PENDENTE")
   observacao            String?
+}
+
+model Lote {
+  id         String     @id @default(uuid())
+  codigo     String?    @unique
+  titulo     String
+  observacao String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  itens      LoteItem[]
+
+  @@index([createdAt])
+}
+
+model LoteItem {
+  id           String     @id @default(uuid())
+  loteId       String
+  lote         Lote       @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  lancamentoId String
+  lancamento   Lancamento @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+  ordem        Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@unique([loteId, lancamentoId])
+  @@index([loteId])
+  @@index([lancamentoId])
 }
 

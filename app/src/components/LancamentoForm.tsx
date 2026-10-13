@@ -24,11 +24,13 @@ import {
   FileCheck2,
   RotateCcw,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Package,
 } from 'lucide-react';
 import { createLancamento, verificarLancamentoSimilar, type LancamentoSimilarInfo } from '@/actions/lancamentos';
 import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
 import { adicionarCobranca } from '@/actions/cobrancas';
+import { criarLote, adicionarAoLote } from '@/actions/lotes';
 import type { ExtracaoNfeResult } from '@/lib/nfParser';
 
 type Props = {
@@ -38,6 +40,7 @@ type Props = {
   agencias: { id: string, nome: string, cnpj?: string | null }[];
   tiposDocumento: { id: string, nome: string }[];
   veiculos: { id: string, nome: string }[];
+  lotesRecentes?: { id: string; codigo: string | null; titulo: string; _count: { itens: number } }[];
 };
 
 const UFS_BRASIL = [
@@ -52,11 +55,16 @@ const UFS_BRASIL = [
   { sigla: 'SP', nome: 'São Paulo' }, { sigla: 'SE', nome: 'Sergipe' }, { sigla: 'TO', nome: 'Tocantins' },
 ];
 
-export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias, tiposDocumento, veiculos }: Props) {
+export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias, tiposDocumento, veiculos, lotesRecentes = [] }: Props) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tipoLancamento, setTipoLancamento] = useState<'RECEITA' | 'DESPESA'>(initialTipo);
   const [novoRegistro, setNovoRegistro] = useState(false);
+
+  // Lote do Financeiro (Opcional)
+  const [loteModo, setLoteModo] = useState<'NENHUM' | 'EXISTENTE' | 'NOVO'>('NENHUM');
+  const [loteSelecionadoId, setLoteSelecionadoId] = useState('');
+  const [novoLoteTitulo, setNovoLoteTitulo] = useState('');
 
   // Formulário State
   const [buscaPessoa, setBuscaPessoa] = useState('');
@@ -716,7 +724,8 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       });
 
       const res = await createLancamento(formData);
-      if (res?.success) {
+      if (res?.success && res.id) {
+        const novoId = res.id;
         // Se o usuário optou por enviar para a planilha de cobranças automáticas de agência
         if (enviarParaCobrancaAgencia && buscaAgencia.trim() && numeroPi.trim()) {
           try {
@@ -741,7 +750,22 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
           }
         }
 
-        router.push(`/lancamento/${res.id}`);
+        // Se o usuário optou por vincular a um Lote para o Financeiro
+        if (loteModo === 'EXISTENTE' && loteSelecionadoId) {
+           try {
+             await adicionarAoLote(loteSelecionadoId, [novoId]);
+           } catch (loteErr) {
+             console.error('Falha ao adicionar ao lote:', loteErr);
+           }
+         } else if (loteModo === 'NOVO' && novoLoteTitulo.trim()) {
+           try {
+             await criarLote({ titulo: novoLoteTitulo.trim(), lancamentoIds: [novoId] });
+           } catch (loteErr) {
+             console.error('Falha ao criar novo lote:', loteErr);
+           }
+         }
+
+         router.push(`/lancamento/${novoId}`);
       } else {
         alert(res?.error || 'Não foi possível salvar o lançamento.');
         setIsSubmitting(false);
@@ -1760,6 +1784,104 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
           </div>
         </div>
       )}
+
+      {/* Seção 5: Vincular a Lote para o Financeiro (Opcional) */}
+      <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <Package className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Vincular a um Lote para o Financeiro (Opcional)
+              </h3>
+              <p className="text-xs text-slate-500">
+                Agrupe esta nota para poder enviar o pacote de notas emitidas juntas.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={() => setLoteModo('NENHUM')}
+            className={`rounded-xl border p-3 text-left text-xs font-bold transition-all cursor-pointer ${
+              loteModo === 'NENHUM'
+                ? 'border-indigo-600 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-500/20'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Não vincular a lote agora
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLoteModo('EXISTENTE')}
+            className={`rounded-xl border p-3 text-left text-xs font-bold transition-all cursor-pointer ${
+              loteModo === 'EXISTENTE'
+                ? 'border-indigo-600 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-500/20'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Adicionar a lote existente ({lotesRecentes.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLoteModo('NOVO')}
+            className={`rounded-xl border p-3 text-left text-xs font-bold transition-all cursor-pointer ${
+              loteModo === 'NOVO'
+                ? 'border-indigo-600 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-500/20'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            + Criar um novo lote
+          </button>
+        </div>
+
+        {loteModo === 'EXISTENTE' && (
+          <div className="animate-in fade-in duration-150">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Selecione o Lote
+            </label>
+            {lotesRecentes.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">
+                Nenhum lote recente encontrado. Escolha &quot;+ Criar um novo lote&quot; acima.
+              </p>
+            ) : (
+              <select
+                value={loteSelecionadoId}
+                onChange={(e) => setLoteSelecionadoId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 bg-white"
+              >
+                <option value="">Selecione um lote recente...</option>
+                {lotesRecentes.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.codigo ? `[${l.codigo}] ` : ''}{l.titulo} ({l._count.itens} notas)
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        {loteModo === 'NOVO' && (
+          <div className="animate-in fade-in duration-150">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Título do Novo Lote
+            </label>
+            <input
+              type="text"
+              value={novoLoteTitulo}
+              onChange={(e) => setNovoLoteTitulo(e.target.value)}
+              placeholder={`Lote de Notas - ${new Date().toLocaleDateString('pt-BR')}`}
+              className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 bg-white"
+            />
+          </div>
+        )}
+      </div>
 
       {/* Barra de Ação Final */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">

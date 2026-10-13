@@ -12,6 +12,8 @@ import {
   FileText,
   Wallet,
   Users,
+  Package,
+  FileSpreadsheet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { LancamentosTable } from './LancamentosTable';
@@ -108,7 +110,26 @@ export default async function LancamentosList({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col gap-2 sm:flex-row shrink-0">
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Link
+            href="/lotes"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-indigo-800 hover:bg-indigo-100 transition-all active:scale-[0.98]"
+            title="Ver todos os lotes criados para o financeiro"
+          >
+            <Package className="h-4 w-4 text-indigo-600" />
+            Lotes do Financeiro
+          </Link>
+
+          <a
+            href={`/api/lancamentos/exportar-excel?tipo=${tipo}`}
+            download
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 hover:bg-emerald-100 transition-all active:scale-[0.98]"
+            title="Exportar todos os lançamentos desta categoria em planilha Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            Exportar Excel
+          </a>
+
           <Link
             href={`/novo-lancamento?tipo=${tipo === 'DESPESA' ? 'DESPESA' : 'RECEITA'}`}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-xs transition-all active:scale-[0.98] ${

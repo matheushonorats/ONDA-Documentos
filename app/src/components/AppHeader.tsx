@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Menu, X, PlusCircle, UploadCloud, ChevronDown, Radio, Layers, Wallet, Users, Building2, ListChecks, FileSpreadsheet } from 'lucide-react';
+import { Menu, X, PlusCircle, UploadCloud, ChevronDown, Radio, Layers, Wallet, Users, Building2, ListChecks, FileSpreadsheet, Package } from 'lucide-react';
 import { useState, useRef, useEffect, Suspense } from 'react';
 
 function AppHeaderContent() {
@@ -13,6 +13,7 @@ function AppHeaderContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tipoParam = searchParams.get('tipo');
+  const isLotesActive = pathname.startsWith('/lote');
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -81,6 +82,11 @@ function AppHeaderContent() {
             <Link href="/cobrancas" className={navItemClass(isCobrancasActive)}>
               <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
               Cobranças
+            </Link>
+
+            <Link href="/lotes" className={navItemClass(isLotesActive)}>
+              <Package className="h-4 w-4 text-emerald-600" />
+              Lotes
             </Link>
 
             {/* Dropdown Cadastros */}
@@ -222,6 +228,19 @@ function AppHeaderContent() {
               <span className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
                 Cobrança de Agências
+              </span>
+            </Link>
+
+            <Link
+              href="/lotes"
+              onClick={() => setOpen(false)}
+              className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-bold ${
+                isLotesActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-emerald-600" />
+                Lotes do Financeiro
               </span>
             </Link>
 

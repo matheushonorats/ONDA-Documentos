@@ -1,9 +1,13 @@
-import { Eye, FileText, Radio, UploadCloud, AlertTriangle, Calendar, Layers } from 'lucide-react';
+'use client';
+
+import { useState, useMemo } from 'react';
+import { Eye, FileText, UploadCloud, AlertTriangle, Calendar, Package, X, Check } from 'lucide-react';
 import Link from 'next/link';
 import { Lancamento, Cliente, Colaborador, Documento, Agencia, Veiculo } from '@/generated/prisma';
 import { TickerText } from '@/components/TickerText';
 import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
 import { CopyCnpj } from '@/components/CopyCnpj';
+import { CriarLoteModal } from '@/components/CriarLoteModal';
 
 type Item = Lancamento & {
   cliente: Cliente | null;
@@ -53,6 +57,30 @@ export function getVeiculoColor(veiculo: string | undefined | null) {
 }
 
 export function LancamentosTable({ initialData }: { initialData: Item[] }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [modalLoteOpen, setModalLoteOpen] = useState(false);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === initialData.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(initialData.map((it) => it.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const totalValorSelecionado = useMemo(() => {
+    const set = new Set(selectedIds);
+    return initialData
+      .filter((it) => set.has(it.id))
+      .reduce((acc, it) => acc + (it.valor || 0), 0);
+  }, [selectedIds, initialData]);
+
   if (!initialData.length) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
@@ -72,62 +100,75 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
         {initialData.map((item) => {
           const isReceita = item.tipoLancamento === 'RECEITA';
           const hasNf = Boolean(item.numeroNotaFiscal);
+          const isSelected = selectedIds.includes(item.id);
 
           return (
             <div
               key={item.id}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3"
+              className={`rounded-2xl border bg-white p-4 shadow-xs space-y-3 transition-colors ${
+                isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20' : 'border-slate-200'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                      {item.appSheetId || item.id.slice(0, 8)}
-                    </span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${
-                        isReceita ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}
-                    >
-                      {isReceita ? 'Receita' : 'Despesa'}
-                    </span>
-                    {item.veiculo && (
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${getVeiculoColor(item.veiculo.nome)}`}>
-                        {item.veiculo.nome}
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  {/* Checkbox mobile */}
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(item.id)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {item.appSheetId || item.id.slice(0, 8)}
                       </span>
-                    )}
-                  </div>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${
+                          isReceita ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {isReceita ? 'Receita' : 'Despesa'}
+                      </span>
+                      {item.veiculo && (
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${getVeiculoColor(item.veiculo.nome)}`}>
+                          {item.veiculo.nome}
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    <Link href={`/lancamento/${item.id}`} className="block">
-                      <h2 className="truncate font-black text-slate-900 text-base hover:text-indigo-600 transition-colors">
-                        {owner(item) || 'Sem identificação'}
-                      </h2>
-                    </Link>
-                    {(isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj) && (
-                      <CopyCnpj
-                        cnpj={isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj}
-                        variant="badge"
-                        className="text-[10px] py-0.5 px-1.5"
-                      />
-                    )}
-                  </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <Link href={`/lancamento/${item.id}`} className="block">
+                        <h2 className="truncate font-black text-slate-900 text-base hover:text-indigo-600 transition-colors">
+                          {owner(item) || 'Sem identificação'}
+                        </h2>
+                      </Link>
+                      {(isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj) && (
+                        <CopyCnpj
+                          cnpj={isReceita ? item.cliente?.cnpj : item.colaborador?.cpfCnpj}
+                          variant="badge"
+                          className="text-[10px] py-0.5 px-1.5"
+                        />
+                      )}
+                    </div>
 
-                  {item.agencia && (
-                    <p className="truncate text-xs font-semibold text-indigo-600">
-                      Agência: {item.agencia.nome}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <TickerText text={item.descricao || 'Sem descrição'} className="text-xs text-slate-500" />
-                    {item.descricao && (
-                      <CopyDescricaoButton
-                        text={item.descricao}
-                        variant="icon"
-                        className="p-1 h-5 w-5 shrink-0 opacity-70 hover:opacity-100"
-                      />
+                    {item.agencia && (
+                      <p className="truncate text-xs font-semibold text-indigo-600">
+                        Agência: {item.agencia.nome}
+                      </p>
                     )}
+
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <TickerText text={item.descricao || 'Sem descrição'} className="text-xs text-slate-500" />
+                      {item.descricao && (
+                        <CopyDescricaoButton
+                          text={item.descricao}
+                          variant="icon"
+                          className="p-1 h-5 w-5 shrink-0 opacity-70 hover:opacity-100"
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -165,16 +206,17 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/novo-documento?lancamento=${item.id}`}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-indigo-600"
                     title="Anexar documento"
                   >
                     <UploadCloud className="h-4 w-4" />
                   </Link>
+
                   <Link
                     href={`/lancamento/${item.id}`}
-                    className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800"
+                    className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200"
                   >
-                    <Eye className="h-4 w-4" /> Abrir
+                    Ver detalhes
                   </Link>
                 </div>
               </div>
@@ -184,11 +226,21 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs md:block">
+      <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left">
-            <thead className="bg-slate-50">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
+                {/* Checkbox selecionar todos */}
+                <th scope="col" className="w-10 px-4 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={initialData.length > 0 && selectedIds.length === initialData.length}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    title="Selecionar todos os itens da página"
+                  />
+                </th>
                 <th scope="col" className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                   Tipo / Código
                 </th>
@@ -207,7 +259,7 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
                 <th scope="col" className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">
                   Anexos
                 </th>
-                <th scope="col" className="relative px-5 py-3">
+                <th scope="col" className="relative px-5 py-3 text-right">
                   <span className="sr-only">Ações</span>
                 </th>
               </tr>
@@ -216,9 +268,25 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
               {initialData.map((item) => {
                 const isReceita = item.tipoLancamento === 'RECEITA';
                 const hasNf = Boolean(item.numeroNotaFiscal);
+                const isSelected = selectedIds.includes(item.id);
 
                 return (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50/80">
+                  <tr
+                    key={item.id}
+                    className={`transition-colors ${
+                      isSelected ? 'bg-indigo-50/40 hover:bg-indigo-50/60' : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    {/* Checkbox linha */}
+                    <td className="w-10 px-4 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(item.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Col 1: Tipo & Código */}
                     <td className="whitespace-nowrap px-5 py-4">
                       <span
@@ -348,7 +416,49 @@ export function LancamentosTable({ initialData }: { initialData: Item[] }) {
           </table>
         </div>
       </div>
+
+      {/* Barra Flutuante de Seleção em Lote */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-wrap items-center gap-3 rounded-2xl bg-slate-950 px-5 py-3 text-white shadow-2xl border border-slate-800 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-slate-950">
+              {selectedIds.length}
+            </span>
+            <span>{selectedIds.length === 1 ? 'nota selecionada' : 'notas selecionadas'}</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-emerald-400">
+              Total: R$ {totalValorSelecionado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setModalLoteOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs sm:text-sm font-bold text-white hover:bg-indigo-700 active:scale-95 transition-all cursor-pointer shadow-sm"
+          >
+            <Package className="h-4 w-4" />
+            Criar Lote para o Financeiro
+          </button>
+
+          <button
+            onClick={() => setSelectedIds([])}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            title="Limpar seleção"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Modal de Criação de Lote */}
+      <CriarLoteModal
+        selectedIds={selectedIds}
+        totalValor={totalValorSelecionado}
+        isOpen={modalLoteOpen}
+        onClose={() => setModalLoteOpen(false)}
+        onSuccess={() => {
+          // Mantém o modal aberto mostrando a tela de sucesso com o link e botão de download!
+        }}
+      />
     </>
   );
 }
-
