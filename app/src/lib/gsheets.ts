@@ -97,20 +97,30 @@ export async function findFirstAvailableRow(): Promise<{ rowNumber: number; cobr
     range: 'A:D',
   });
   const rows = res.data.values ?? [];
+
+  let maxCobrancaNo = 0;
+  let firstEmptyRowNumber = 0;
+
   for (let i = 1; i < rows.length; i++) {
+    const rawNo = (rows[i]?.[0] ?? '').toString().trim();
+    const num = parseInt(rawNo, 10);
+    if (!isNaN(num) && num > maxCobrancaNo) {
+      maxCobrancaNo = num;
+    }
+
     const pi = (rows[i]?.[1] ?? '').toString().trim();
     const agencia = (rows[i]?.[3] ?? '').toString().trim();
-    if (!pi && !agencia) {
-      const existingNo = (rows[i]?.[0] ?? '').toString().trim();
-      return {
-        rowNumber: i + 1,
-        cobrancaNo: existingNo || String(i),
-      };
+    if (!pi && !agencia && firstEmptyRowNumber === 0) {
+      firstEmptyRowNumber = i + 1;
     }
   }
+
+  const nextCobrancaNo = String(maxCobrancaNo + 1);
+  const rowNumber = firstEmptyRowNumber > 0 ? firstEmptyRowNumber : rows.length + 1;
+
   return {
-    rowNumber: rows.length + 1,
-    cobrancaNo: String(rows.length),
+    rowNumber,
+    cobrancaNo: nextCobrancaNo,
   };
 }
 

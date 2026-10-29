@@ -493,32 +493,63 @@ export async function adicionarCobranca(
   try {
     const proximoNumero = await getNextCobrancaNo();
 
-    // Se o e-mail estiver vazio, tenta herdar e-mail já existente dessa agência na planilha
+    // Se o e-mail ou nome da agência estiver cru, tenta herdar e-mail e nome padronizado da planilha
     let emailFinal = dados.email.trim();
-    if (!emailFinal && dados.agencia.trim()) {
-      try {
-        const currentData = await getCobrancasData(false);
-        const grupo = currentData.agenciasGrupos.find(
-          (g) => g.agencia.toLowerCase().trim() === dados.agencia.toLowerCase().trim()
+    let agenciaFinal = dados.agencia.trim();
+    let veiculoFinal = dados.veiculo.trim();
+
+    if (veiculoFinal.toLowerCase().includes('rock')) {
+      veiculoFinal = 'Rock News Litoral 98,5 FM';
+    } else if (veiculoFinal.toLowerCase().includes('onda')) {
+      veiculoFinal = 'Onda FM';
+    }
+
+    try {
+      const currentData = await getCobrancasData(false);
+      const lowerInput = dados.agencia.toLowerCase().trim();
+
+      const grupo = currentData.agenciasGrupos.find((g) => {
+        const lowerG = g.agencia.toLowerCase().trim();
+        return (
+          lowerG === lowerInput ||
+          lowerInput.includes(lowerG) ||
+          lowerG.includes(lowerInput) ||
+          (lowerInput.includes('calia') && lowerG.includes('calia')) ||
+          (lowerInput.includes('seven') && lowerG.includes('seven')) ||
+          (lowerInput.includes('propeg') && lowerG.includes('propeg')) ||
+          (lowerInput.includes('baila') && lowerG.includes('baila'))
         );
-        if (grupo && grupo.emails && grupo.emails.length > 0) {
+      });
+
+      if (grupo) {
+        agenciaFinal = grupo.agencia; // Padroniza com o nome consagrado na planilha
+        if (!emailFinal && grupo.emails && grupo.emails.length > 0) {
           emailFinal = grupo.emails.join(', ');
         }
-      } catch {}
+      }
+    } catch {}
+
+    // Formata o valor sempre como moeda brasileira "R$ X.XXX,XX"
+    let valorFinal = '';
+    if (typeof dados.valor === 'number') {
+      valorFinal = formatCurrency(dados.valor);
+    } else {
+      const num = parseCurrency(dados.valor);
+      valorFinal = num > 0 ? formatCurrency(num) : dados.valor.trim();
     }
 
     const rowValues = [
       proximoNumero,
       dados.pi.trim(),
-      dados.veiculo.trim(),
-      dados.agencia.trim(),
-      typeof dados.valor === 'number' ? dados.valor.toFixed(2).replace('.', ',') : dados.valor.trim(),
+      veiculoFinal,
+      agenciaFinal,
+      valorFinal,
       dados.dataVencimento.trim(),
       emailFinal,
       '',
       dados.link?.trim() || '',
       dados.dataVencimento.trim(),
-      dados.obs?.trim() || '',
+      dados.obs?.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim() || '',
       'FALSE',
     ];
     const cobrancaNo = await appendRow(rowValues);
@@ -549,9 +580,15 @@ export async function enviarLancamentoParaPlanilhaCobranca(lancamentoId: string)
     if (!lancamento) throw new Error('Lançamento não encontrado.');
 
     const pi = (lancamento.numeroPi || '').trim() || (lancamento.numeroContrato || '').trim() || 'Sem PI';
-    const veiculo = lancamento.veiculo?.nome || 'Onda FM';
+    let veiculo = lancamento.veiculo?.nome || 'Onda FM';
+    if (veiculo.toLowerCase().includes('rock')) {
+      veiculo = 'Rock News Litoral 98,5 FM';
+    } else {
+      veiculo = 'Onda FM';
+    }
+
     const agencia = lancamento.agencia?.nome || lancamento.cliente?.nomeFantasia || lancamento.cliente?.razaoSocial || 'Cliente Direto';
-    const valor = lancamento.valor !== null ? lancamento.valor.toFixed(2).replace('.', ',') : '0,00';
+    const valor = lancamento.valor !== null ? lancamento.valor : 0;
 
     let dataFormatada = '';
     if (lancamento.vencimento) {
@@ -566,11 +603,16 @@ export async function enviarLancamentoParaPlanilhaCobranca(lancamentoId: string)
     const link = docComLink?.urlPublica || '';
 
     let obs = '';
+    const clienteNome = lancamento.cliente?.nomeFantasia || lancamento.cliente?.razaoSocial || '';
     if (lancamento.numeroNotaFiscal) {
       obs = `NF ${lancamento.numeroNotaFiscal}`;
-      if (lancamento.descricao) obs += ` - ${lancamento.descricao.slice(0, 80)}`;
+      if (clienteNome) {
+        obs += ` - ${clienteNome.slice(0, 50)}`;
+      }
+    } else if (clienteNome) {
+      obs = clienteNome.slice(0, 60);
     } else if (lancamento.descricao) {
-      obs = lancamento.descricao.slice(0, 100);
+      obs = lancamento.descricao.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').slice(0, 60);
     }
 
     const email = '';
