@@ -180,8 +180,9 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
     const mainTargetId = lancamento.id;
 
     for (const item of uploaded) {
-      // Notas Fiscais, Boletos e Comprovantes pertencem APENAS a parcela individual em que foram anexados
-      const isSpecificDoc = /nota fiscal|\bnf\b|boleto|comprovante/i.test(item.typeName) || /nota fiscal|\bnf\b|boleto|comprovante/i.test(item.name);
+      // Notas Fiscais e Boletos pertencem APENAS à parcela individual em que foram anexados
+      // Comprovantes de veiculação, PIs, Contratos e Autorizações são compartilhados com as parcelas do contrato
+      const isSpecificDoc = /nota fiscal|\bnf\b|boleto/i.test(item.typeName) || /nota fiscal|\bnf\b|boleto/i.test(item.name);
       const idsForThisDoc = !isSpecificDoc && targetIds && targetIds.length > 0 ? targetIds : [mainTargetId];
 
       for (const targetId of idsForThisDoc) {
@@ -443,12 +444,45 @@ export async function createLancamento(formData: FormData) {
 
 export async function adicionarDocumentos(lancamentoId: string, formData: FormData) {
   try {
-    const lancamento = await db.lancamento.findUnique({ where: { id: lancamentoId } });
+    const lancamento = await db.lancamento.findUnique({
+      where: { id: lancamentoId },
+      include: { veiculo: true },
+    });
     if (!lancamento) throw new Error('Lançamento não encontrado.');
-    const count = await saveDocuments(lancamento, formData);
+
+    // Se replicarContrato !== 'false' e houver PI ou Contrato, busca todas as parcelas do mesmo contrato
+    const replicarContrato = formData.get('replicarContrato') !== 'false';
+    let targetIds: string[] = [lancamento.id];
+
+    if (replicarContrato) {
+      const cleanKey = (k?: string | null) =>
+        k && !/^[-_.\s]+$/.test(k.trim()) && !/^(?:NENHUM|SEM|NAO|N\/A)$/i.test(k.trim()) ? k.trim() : null;
+      const validPi = cleanKey(lancamento.numeroPi);
+      const validContrato = cleanKey(lancamento.numeroContrato);
+
+      if (validPi || validContrato) {
+        const where: any = {
+          tipoLancamento: lancamento.tipoLancamento,
+          ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
+          ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
+        };
+        if (lancamento.veiculoId) where.veiculoId = lancamento.veiculoId;
+        if (validPi) where.numeroPi = validPi;
+        else if (validContrato) where.numeroContrato = validContrato;
+
+        const parcelas = await db.lancamento.findMany({ where, select: { id: true } });
+        if (parcelas.length > 0) {
+          targetIds = Array.from(new Set([lancamento.id, ...parcelas.map(p => p.id)]));
+        }
+      }
+    }
+
+    const count = await saveDocuments(lancamento, formData, targetIds);
     if (!count) throw new Error('Selecione ao menos um arquivo.');
-    refreshLancamento(lancamento.id);
-    return { success: true, count };
+    for (const tId of targetIds) {
+      refreshLancamento(tId);
+    }
+    return { success: true, count, parcelasAfetadas: targetIds.length };
   } catch (error) {
     console.error('Erro ao adicionar documentos:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Não foi possível enviar os arquivos.' };
@@ -601,6 +635,67 @@ export async function deleteLancamento(id: string) {
   }
 }
 
+export async function getParcelasDoContrato(lancamentoId: string) {
+  const lancamento = await db.lancamento.findUnique({
+    where: { id: lancamentoId },
+    select: {
+      id: true,
+      tipoLancamento: true,
+      clienteId: true,
+      colaboradorId: true,
+      veiculoId: true,
+      numeroPi: true,
+      numeroContrato: true,
+      appSheetId: true,
+      veiculo: { select: { id: true, nome: true } },
+    },
+  });
+
+  if (!lancamento) return [];
+
+  const cleanKey = (k?: string | null) =>
+    k && !/^[-_.\s]+$/.test(k.trim()) && !/^(?:NENHUM|SEM|NAO|N\/A)$/i.test(k.trim())
+      ? k.trim()
+      : null;
+
+  const validPi = cleanKey(lancamento.numeroPi);
+  const validContrato = cleanKey(lancamento.numeroContrato);
+
+  if (!validPi && !validContrato) return [];
+
+  const where: any = {
+    tipoLancamento: lancamento.tipoLancamento,
+    ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
+    ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
+  };
+
+  if (lancamento.veiculoId) {
+    where.veiculoId = lancamento.veiculoId;
+  }
+
+  if (validPi) {
+    where.numeroPi = validPi;
+  } else if (validContrato) {
+    where.numeroContrato = validContrato;
+  }
+
+  const matches = await db.lancamento.findMany({
+    where,
+    select: {
+      id: true,
+      valor: true,
+      vencimento: true,
+      numeroNotaFiscal: true,
+      mesAnoReferencia: true,
+      appSheetId: true,
+      _count: { select: { documentos: true } },
+    },
+    orderBy: [{ vencimento: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  return matches;
+}
+
 export async function sincronizarDocumentosPI() {
   try {
     const lancamentos = await db.lancamento.findMany({
@@ -618,11 +713,12 @@ export async function sincronizarDocumentosPI() {
       const piVal = cleanKey(l.numeroPi);
       const contratoVal = cleanKey(l.numeroContrato);
       const ownerScope = l.clienteId ? `CLI_${l.clienteId}` : l.colaboradorId ? `COL_${l.colaboradorId}` : 'GERAL';
+      const veiculoScope = l.veiculoId ? `VEIC_${l.veiculoId}` : 'NOVEIC';
 
-      const piKey = piVal ? `${ownerScope}_PI_${piVal}` : null;
-      const contratoKey = contratoVal ? `${ownerScope}_CTR_${contratoVal}` : null;
+      const piKey = piVal ? `${ownerScope}_${veiculoScope}_PI_${piVal}` : null;
+      const contratoKey = contratoVal ? `${ownerScope}_${veiculoScope}_CTR_${contratoVal}` : null;
       const appSheetKey = l.appSheetId && l.appSheetId.includes('-') 
-        ? `${ownerScope}_APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
+        ? `${ownerScope}_${veiculoScope}_APP_${l.appSheetId.split('-').slice(0, -1).join('-')}` 
         : null;
 
       const groupKey = piKey || contratoKey || appSheetKey;
@@ -642,10 +738,10 @@ export async function sincronizarDocumentosPI() {
       const allDocsMap = new Map<string, typeof group[0]['documentos'][0]>();
       for (const item of group) {
         for (const doc of item.documentos) {
-          // Apenas documentos gerais do PI (PI, Contrato, Autorização, Orçamento) são compartilhados.
-          // Notas Fiscais, Boletos e Comprovantes NUNCA são copiados entre parcelas.
+          // Documentos do contrato/campanha (PI, Contrato, Autorização, Comprovante de veiculação) são compartilhados.
+          // Apenas Notas Fiscais e Boletos com numeração individual pertencem exclusivamente a cada parcela.
           const typeName = doc.tipoDocumento?.nome || '';
-          const isSpecificDoc = /nota fiscal|\bnf\b|boleto|comprovante/i.test(typeName) || /nota fiscal|\bnf\b|boleto|comprovante/i.test(doc.nomeOriginal);
+          const isSpecificDoc = /nota fiscal|\bnf\b|boleto/i.test(typeName) || /nota fiscal|\bnf\b|boleto/i.test(doc.nomeOriginal);
           if (isSpecificDoc) continue;
 
           const docKey = doc.caminhoOriginal || doc.urlPublica || doc.nomeOriginal;

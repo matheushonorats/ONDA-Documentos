@@ -5,6 +5,7 @@ import { CopyDescricaoButton } from '@/components/CopyDescricaoButton';
 import { CopyCnpj } from '@/components/CopyCnpj';
 import { DocumentoCard } from '@/components/DocumentoCard';
 import { HistoricoTimeline } from '@/components/HistoricoTimeline';
+import { SyncContratoDocsButton } from '@/components/SyncContratoDocsButton';
 import { getVeiculoColor } from '@/lib/veiculo';
 import {
   ArrowLeft,
@@ -62,12 +63,14 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
   if (validPi) {
     parcelasWhere = {
       numeroPi: validPi,
+      ...(lancamento.veiculoId ? { veiculoId: lancamento.veiculoId } : {}),
       ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
       ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
     };
   } else if (validContrato) {
     parcelasWhere = {
       numeroContrato: validContrato,
+      ...(lancamento.veiculoId ? { veiculoId: lancamento.veiculoId } : {}),
       ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
       ...(lancamento.colaboradorId ? { colaboradorId: lancamento.colaboradorId } : {}),
     };
@@ -75,6 +78,7 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
     const prefix = lancamento.appSheetId.split('-').slice(0, -1).join('-');
     parcelasWhere = {
       appSheetId: { startsWith: prefix },
+      ...(lancamento.veiculoId ? { veiculoId: lancamento.veiculoId } : {}),
       ...(lancamento.clienteId ? { clienteId: lancamento.clienteId } : {}),
     };
   }
@@ -349,16 +353,19 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
                 <Layers className="h-5 w-5 text-indigo-600" /> Grade de Parcelas {validPi ? `do PI (${validPi})` : validContrato ? `do Contrato (${validContrato})` : 'da Campanha'}
               </h2>
               <p className="text-xs text-indigo-700 mt-0.5">
-                Campanha parcelada em <strong>{parcelas.length} vezes</strong>. Clique em qualquer parcela para inspecionar ou anexar sua NF específica.
+                Campanha parcelada em <strong>{parcelas.length} vezes</strong>. Os documentos e comprovantes de veiculação gerais são unificados entre as parcelas deste PI e Veículo.
               </p>
             </div>
-            <div className="text-right">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Valor Total da Campanha
-              </span>
-              <p className="text-lg font-black text-indigo-900">
-                {formatCurrency(totalCampaignValue)}
-              </p>
+            <div className="flex items-center gap-3">
+              <SyncContratoDocsButton />
+              <div className="text-right pl-3 border-l border-indigo-200">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Valor Total
+                </span>
+                <p className="text-base sm:text-lg font-black text-indigo-900">
+                  {formatCurrency(totalCampaignValue)}
+                </p>
+              </div>
             </div>
           </div>
 
