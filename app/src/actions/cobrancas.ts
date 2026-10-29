@@ -529,13 +529,12 @@ export async function adicionarCobranca(
       }
     } catch {}
 
-    // Formata o valor sempre como moeda brasileira "R$ X.XXX,XX"
-    let valorFinal = '';
+    // Grava o valor como número nativo no Google Sheets para habilitar formatação oficial de moeda (R$)
+    let valorNumerico: number = 0;
     if (typeof dados.valor === 'number') {
-      valorFinal = formatCurrency(dados.valor);
+      valorNumerico = dados.valor;
     } else {
-      const num = parseCurrency(dados.valor);
-      valorFinal = num > 0 ? formatCurrency(num) : dados.valor.trim();
+      valorNumerico = parseCurrency(dados.valor);
     }
 
     const rowValues = [
@@ -543,7 +542,7 @@ export async function adicionarCobranca(
       dados.pi.trim(),
       veiculoFinal,
       agenciaFinal,
-      valorFinal,
+      valorNumerico > 0 ? valorNumerico : dados.valor,
       dados.dataVencimento.trim(),
       emailFinal,
       '',

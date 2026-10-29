@@ -124,7 +124,7 @@ export async function findFirstAvailableRow(): Promise<{ rowNumber: number; cobr
   };
 }
 
-export async function appendRow(rowValues: string[]): Promise<string> {
+export async function appendRow(rowValues: (string | number)[]): Promise<string> {
   const sheets = getSheetsClient();
   const { rowNumber, cobrancaNo } = await findFirstAvailableRow();
   
@@ -169,6 +169,77 @@ export async function appendRow(rowValues: string[]): Promise<string> {
       throw err;
     }
   }
+
+  // Garante que a nova linha herde as formatações nativas de Moeda (Col E) e Data (Col F e J)
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [
+          {
+            repeatCell: {
+              range: {
+                sheetId: 0,
+                startRowIndex: rowNumber - 1,
+                endRowIndex: rowNumber,
+                startColumnIndex: 4,
+                endColumnIndex: 5,
+              },
+              cell: {
+                userEnteredFormat: {
+                  numberFormat: {
+                    type: 'CURRENCY',
+                    pattern: '[$R$ -416]#,##0.00',
+                  },
+                },
+              },
+              fields: 'userEnteredFormat.numberFormat',
+            },
+          },
+          {
+            repeatCell: {
+              range: {
+                sheetId: 0,
+                startRowIndex: rowNumber - 1,
+                endRowIndex: rowNumber,
+                startColumnIndex: 5,
+                endColumnIndex: 6,
+              },
+              cell: {
+                userEnteredFormat: {
+                  numberFormat: {
+                    type: 'DATE',
+                    pattern: 'dd/MM/yyyy',
+                  },
+                },
+              },
+              fields: 'userEnteredFormat.numberFormat',
+            },
+          },
+          {
+            repeatCell: {
+              range: {
+                sheetId: 0,
+                startRowIndex: rowNumber - 1,
+                endRowIndex: rowNumber,
+                startColumnIndex: 9,
+                endColumnIndex: 10,
+              },
+              cell: {
+                userEnteredFormat: {
+                  numberFormat: {
+                    type: 'DATE',
+                    pattern: 'dd/MM/yyyy',
+                  },
+                },
+              },
+              fields: 'userEnteredFormat.numberFormat',
+            },
+          },
+        ],
+      },
+    });
+  } catch {}
 
   return cobrancaNo;
 }
