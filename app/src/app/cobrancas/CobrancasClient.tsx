@@ -29,6 +29,7 @@ import {
   Undo2,
   Link2,
   Pencil,
+  ListCheck,
 } from 'lucide-react';
 import {
   CobrancasDataResponse,
@@ -55,6 +56,7 @@ import { EmailPreviewModal } from './EmailPreviewModal';
 import { ComprovanteModal } from './ComprovanteModal';
 import { RelatorioGeralModal } from './RelatorioGeralModal';
 import { NovaCobrancaModal } from './NovaCobrancaModal';
+import { ChecklistFinanceiroModal } from './ChecklistFinanceiroModal';
 
 interface CobrancasClientProps {
   initialData: CobrancasDataResponse;
@@ -73,6 +75,22 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
 
   // Estados locais
   const [modoTeste, setModoTeste] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cobrancas_modo_teste');
+      if (saved !== null) {
+        setModoTeste(saved === 'true');
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleModoTeste = (novoValor: boolean) => {
+    setModoTeste(novoValor);
+    try {
+      localStorage.setItem('cobrancas_modo_teste', String(novoValor));
+    } catch {}
+  };
   const [activeTab, setActiveTab] = useState<'vencidas' | 'todos'>('vencidas');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'VENCIDO' | 'A_VENCER' | 'PAGO'>('TODOS');
@@ -82,6 +100,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
   const [comprovanteModalAgency, setComprovanteModalAgency] = useState<AgenciaGrupo | null>(null);
   const [isRelatorioGeralOpen, setIsRelatorioGeralOpen] = useState<boolean>(false);
   const [isNovaCobrancaOpen, setIsNovaCobrancaOpen] = useState<boolean>(false);
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState<boolean>(false);
 
   // Controle de loading de operações em linhas
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
@@ -377,7 +396,7 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
                   id="modo-teste-toggle"
                   type="checkbox"
                   checked={modoTeste}
-                  onChange={(e) => setModoTeste(e.target.checked)}
+                  onChange={(e) => handleToggleModoTeste(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="relative w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
@@ -429,11 +448,22 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
             <button
               type="button"
               onClick={() => setIsRelatorioGeralOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 border border-amber-400/40 px-4 py-2.5 text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-              title="Gera o Panorama Geral de todas as agências em PDF"
+              className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-4 py-2.5 text-xs transition active:scale-95 cursor-pointer shadow-md ring-1 ring-amber-300"
+              title="Gera o Relatório PDF com todas as cobranças de agências em aberto"
             >
-              <Printer className="h-4 w-4 text-amber-300" />
-              Relatório Geral (PDF)
+              <Printer className="h-4 w-4 text-slate-950" />
+              Relatório PDF (Cobranças em Aberto)
+            </button>
+
+            {/* Checklist Financeiro p/ Baixas Button */}
+            <button
+              type="button"
+              onClick={() => setIsChecklistModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 cursor-pointer shadow-md ring-1 ring-blue-400"
+              title="Prepara e-mail de conferência de PIs para adm@ondas985.com.br conferir no extrato e dar baixa"
+            >
+              <ListCheck className="h-4 w-4 text-white" />
+              Checklist p/ Baixas (adm@)
             </button>
 
             {/* Link Planilha Externa */}
@@ -1155,6 +1185,13 @@ export function CobrancasClient({ initialData }: CobrancasClientProps) {
         onSuccess={() => {
           handleSync();
         }}
+      />
+
+      {/* Modal 5: Checklist Financeiro de Auditoria para Baixas (adm@) */}
+      <ChecklistFinanceiroModal
+        isOpen={isChecklistModalOpen}
+        onClose={() => setIsChecklistModalOpen(false)}
+        grupos={agenciasFiltradas.length > 0 ? agenciasFiltradas : data.agenciasGrupos}
       />
     </div>
   );

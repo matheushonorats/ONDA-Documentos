@@ -492,6 +492,21 @@ export async function adicionarCobranca(
 ): Promise<{ success: boolean; error?: string; cobrancaNo?: string }> {
   try {
     const proximoNumero = await getNextCobrancaNo();
+
+    // Se o e-mail estiver vazio, tenta herdar e-mail já existente dessa agência na planilha
+    let emailFinal = dados.email.trim();
+    if (!emailFinal && dados.agencia.trim()) {
+      try {
+        const currentData = await getCobrancasData(false);
+        const grupo = currentData.agenciasGrupos.find(
+          (g) => g.agencia.toLowerCase().trim() === dados.agencia.toLowerCase().trim()
+        );
+        if (grupo && grupo.emails && grupo.emails.length > 0) {
+          emailFinal = grupo.emails.join(', ');
+        }
+      } catch {}
+    }
+
     const rowValues = [
       proximoNumero,
       dados.pi.trim(),
@@ -499,7 +514,7 @@ export async function adicionarCobranca(
       dados.agencia.trim(),
       typeof dados.valor === 'number' ? dados.valor.toFixed(2).replace('.', ',') : dados.valor.trim(),
       dados.dataVencimento.trim(),
-      dados.email.trim(),
+      emailFinal,
       '',
       dados.link?.trim() || '',
       dados.dataVencimento.trim(),
@@ -514,4 +529,85 @@ export async function adicionarCobranca(
     return { success: false, error: error?.message || 'Erro ao adicionar linha na planilha.' };
   }
 }
+
+/**
+ * Envia um lançamento do sistema diretamente como uma nova linha na Planilha Semanal de Cobranças.
+ */
+export async function enviarLancamentoParaPlanilhaCobranca(lancamentoId: string): Promise<{ success: boolean; error?: string; cobrancaNo?: string }> {
+  try {
+    const { db } = await import('@/lib/db');
+    const lancamento = await db.lancamento.findUnique({
+      where: { id: lancamentoId },
+      include: {
+        cliente: true,
+        agencia: true,
+        veiculo: true,
+        documentos: { include: { tipoDocumento: true }, orderBy: { dataInclusao: 'desc' } },
+      },
+    });
+
+    if (!lancamento) throw new Error('Lançamento não encontrado.');
+
+    const pi = (lancamento.numeroPi || '').trim() || (lancamento.numeroContrato || '').trim() || 'Sem PI';
+    const veiculo = lancamento.veiculo?.nome || 'Onda FM';
+    const agencia = lancamento.agencia?.nome || lancamento.cliente?.nomeFantasia || lancamento.cliente?.razaoSocial || 'Cliente Direto';
+    const valor = lancamento.valor !== null ? lancamento.valor.toFixed(2).replace('.', ',') : '0,00';
+
+    let dataFormatada = '';
+    if (lancamento.vencimento) {
+      const d = new Date(lancamento.vencimento);
+      const dia = String(d.getUTCDate()).padStart(2, '0');
+      const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const ano = d.getUTCFullYear();
+      dataFormatada = `${dia}/${mes}/${ano}`;
+    }
+
+    const docComLink = lancamento.documentos.find(d => d.urlPublica);
+    const link = docComLink?.urlPublica || '';
+
+    let obs = '';
+    if (lancamento.numeroNotaFiscal) {
+      obs = `NF ${lancamento.numeroNotaFiscal}`;
+      if (lancamento.descricao) obs += ` - ${lancamento.descricao.slice(0, 80)}`;
+    } else if (lancamento.descricao) {
+      obs = lancamento.descricao.slice(0, 100);
+    }
+
+    const email = '';
+
+    const res = await adicionarCobranca({
+      pi,
+      veiculo,
+      agencia,
+      valor,
+      dataVencimento: dataFormatada,
+      email,
+      link,
+      obs,
+    });
+
+    if (res.success) {
+      await db.historicoLancamento.create({
+        data: {
+          lancamentoId,
+          acao: 'EDICAO_DADOS',
+          descricao: `Lançamento enviado para a Planilha Semanal de Cobranças (Linha nº ${res.cobrancaNo}).`,
+          usuario: 'Usuário',
+        },
+      });
+      try {
+        revalidatePath(`/lancamento/${lancamentoId}`);
+        revalidatePath('/cobrancas');
+      } catch {
+        // Ignora caso executado fora do contexto de requisição do Next.js
+      }
+    }
+
+    return res;
+  } catch (error: any) {
+    console.error('Erro ao enviar lançamento para planilha:', error);
+    return { success: false, error: error?.message || 'Erro ao enviar para a planilha.' };
+  }
+}
+
 

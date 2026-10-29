@@ -438,3 +438,164 @@ E-mail: ${FINANCEIRO_EMAIL}`;
     modoTeste,
   };
 }
+
+/**
+ * Gera um e-mail de conferência e auditoria interna direcionado a adm@ondas985.com.br,
+ * contendo todos os PIs e agências com pagamentos pendentes para que o responsável
+ * confira no extrato bancário e informe quais foram pagos para dar baixa.
+ */
+export function buildChecklistFinanceiroEmail(grupos: AgenciaGrupo[]): EmailGerado {
+  const hojeStr = new Date().toLocaleDateString('pt-BR');
+  const assunto = `[CONFERÊNCIA FINANCEIRA] Verificação de Pagamentos de Agências em Aberto (${hojeStr})`;
+
+  const totalGeral = grupos.reduce((acc, g) => acc + g.totalValor, 0);
+  const totalFormatado = formatCurrency(totalGeral);
+  const totalDebitos = grupos.reduce((acc, g) => acc + g.debts.length, 0);
+
+  // Linhas de texto puro
+  let linhasTexto = '';
+  grupos.forEach((g) => {
+    linhasTexto += `\n═══════════════════════════════════════════════════════════════\n`;
+    linhasTexto += `AGÊNCIA: ${g.agencia.toUpperCase()} (Total: ${g.totalValorFormatado} | ${g.debts.length} débito(s))\n`;
+    linhasTexto += `E-mails: ${g.emailsFormatados || 'Nenhum'}\n`;
+    linhasTexto += `───────────────────────────────────────────────────────────────\n`;
+    g.debts.forEach((d) => {
+      linhasTexto += `[  ] PAGO? | PI: ${d.pi} | Veículo: ${d.veiculo} | Venc: ${d.dataVenc}${d.diasAtraso > 0 ? ` (${d.diasAtraso}d atraso)` : ''} | Valor: ${d.valorFormatado}\n`;
+      if (d.obs) linhasTexto += `     Obs: ${d.obs}\n`;
+      if (d.link) linhasTexto += `     NF: ${d.link}\n`;
+    });
+  });
+
+  const texto = `Prezado(a) responsável pelo Financeiro (${FINANCEIRO_EMAIL}),
+
+Segue a lista completa e organizada de TODOS os contratos/PIs de agências que atualmente constam como PENDENTES no sistema de cobrança.
+
+FINALIDADE DESTA CONFERÊNCIA:
+Como as cobranças estão ativas, precisamos evitar cobrar clientes e agências que já efetuaram o pagamento.
+
+INSTRUÇÕES:
+1. Por favor, verifique nos extratos bancários se algum dos PIs abaixo já foi pago ou compensado.
+2. Responda a este e-mail informando o número dos PIs que já constam como pagos para que possamos dar a baixa imediata na planilha e no sistema.
+
+MÉTRICAS DO RELATÓRIO:
+• Data do Levantamento: ${hojeStr}
+• Total de Agências com Pendência: ${grupos.length}
+• Quantidade de Títulos/PIs: ${totalDebitos}
+• Valor Total em Aberto: ${totalFormatado}
+
+LISTA DE CONFERÊNCIA POR AGÊNCIA:
+${linhasTexto}
+
+═══════════════════════════════════════════════════════════════
+Ondas Sistema de Radiodifusão LTDA
+Gerado automaticamente pelo Sistema ONDA Documentos`;
+
+  // HTML elegante com tabela e checkboxes visuais
+  let blocosAgenciasHtml = '';
+  grupos.forEach((g) => {
+    const rows = g.debts
+      .map(
+        (d) => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px; font-weight: bold; color: #1e293b; font-family: monospace;">${d.pi}</td>
+          <td style="padding: 10px; color: #475569;">${d.veiculo}</td>
+          <td style="padding: 10px; color: #1e293b;">${d.dataVenc}</td>
+          <td style="padding: 10px; text-align: center;">
+            <span style="background: ${d.diasAtraso > 30 ? '#fee2e2; color: #991b1b;' : '#fef3c7; color: #92400e;'} padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">
+              ${d.diasAtraso} dias
+            </span>
+          </td>
+          <td style="padding: 10px; font-family: monospace; font-weight: bold; color: #0f172a; text-align: right;">${d.valorFormatado}</td>
+          <td style="padding: 10px; font-size: 12px; color: #64748b;">${d.obs || '—'}</td>
+          <td style="padding: 10px; text-align: center;">
+            <span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px;"></span>
+          </td>
+        </tr>
+      `
+      )
+      .join('');
+
+    blocosAgenciasHtml += `
+      <div style="margin-bottom: 24px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff;">
+        <div style="background: #f1f5f9; padding: 12px 16px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="font-size: 14px; color: #0f172a;">${g.agencia}</strong>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Contatos: ${g.emailsFormatados || 'Nenhum e-mail'}</div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 14px; font-weight: 800; color: #1e3a8a;">${g.totalValorFormatado}</span>
+            <div style="font-size: 11px; color: #64748b;">${g.debts.length} débito(s)</div>
+          </div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+          <thead>
+            <tr style="background: #f8fafc; color: #475569; font-weight: bold; border-bottom: 1px solid #cbd5e1;">
+              <th style="padding: 8px 10px;">PI</th>
+              <th style="padding: 8px 10px;">Veículo</th>
+              <th style="padding: 8px 10px;">Vencimento</th>
+              <th style="padding: 8px 10px; text-align: center;">Atraso</th>
+              <th style="padding: 8px 10px; text-align: right;">Valor</th>
+              <th style="padding: 8px 10px;">Obs / NF</th>
+              <th style="padding: 8px 10px; text-align: center;">Pago?</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    `;
+  });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #334155;">
+  <div style="max-width: 800px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+    <div style="background: #003366; padding: 24px; color: #ffffff;">
+      <h2 style="margin: 0; font-size: 20px; font-weight: 800;">Conferência de Cobranças em Aberto (Baixas)</h2>
+      <p style="margin: 6px 0 0 0; font-size: 13px; color: #93c5fd;">Auditoria para conciliação bancária e prevenção de cobranças indevidas</p>
+    </div>
+    <div style="padding: 24px;">
+      <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 4px; margin-bottom: 20px; font-size: 13px; color: #1e40af; line-height: 1.5;">
+        <strong>Atenção:</strong> Por favor, verifique nos extratos bancários se os PIs abaixo já foram quitados. Responda este e-mail informando os PIs pagos para que possamos dar baixa no sistema e na planilha.
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Total em Aberto</div>
+          <div style="font-size: 18px; font-weight: 800; color: #dc2626; margin-top: 2px;">${totalFormatado}</div>
+        </div>
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Agências</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${grupos.length}</div>
+        </div>
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Contratos / PIs</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${totalDebitos}</div>
+        </div>
+      </div>
+
+      ${blocosAgenciasHtml}
+    </div>
+    <div style="background: #f1f5f9; padding: 16px 24px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
+      Ondas Sistema de Radiodifusão LTDA — Departamento Financeiro
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const crlfBody = texto.replace(/\r?\n/g, '\r\n');
+  const mailtoUrl = `mailto:${FINANCEIRO_EMAIL}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(crlfBody)}`;
+
+  return {
+    assunto,
+    html,
+    texto,
+    destinatarios: [FINANCEIRO_EMAIL],
+    replyTo: FINANCEIRO_EMAIL,
+    bcc: '',
+    mailtoUrl,
+    modoTeste: false,
+  };
+}

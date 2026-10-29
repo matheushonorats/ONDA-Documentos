@@ -6,6 +6,7 @@ import { CopyCnpj } from '@/components/CopyCnpj';
 import { DocumentoCard } from '@/components/DocumentoCard';
 import { HistoricoTimeline } from '@/components/HistoricoTimeline';
 import { SyncContratoDocsButton } from '@/components/SyncContratoDocsButton';
+import { EnviarParaPlanilhaButton } from '@/components/EnviarParaPlanilhaButton';
 import { getVeiculoColor } from '@/lib/veiculo';
 import {
   ArrowLeft,
@@ -137,6 +138,13 @@ export default async function LancamentoDetails({ params }: { params: Promise<{ 
 
         <div className="flex flex-wrap items-center gap-2">
           <CopyPageLinkButton />
+
+          {isClient && (
+            <EnviarParaPlanilhaButton
+              lancamentoId={id}
+              temAgenciaOuPi={Boolean(lancamento.agencia || lancamento.numeroPi)}
+            />
+          )}
 
           <Link
             href={`/lancamento/${id}/editar`}

@@ -336,10 +336,12 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       setAutoAgenciaId(dados.agenciaId);
       setAutoAgenciaCnpj(dados.agenciaCnpj || null);
       setBuscaAgencia(dados.agenciaNome || '');
+      setEnviarParaCobrancaAgencia(true);
     } else if (dados.agenciaNome) {
       setAutoAgenciaId(null);
       setAutoAgenciaCnpj(dados.agenciaCnpj || null);
       setBuscaAgencia(dados.agenciaNome);
+      setEnviarParaCobrancaAgencia(true);
     }
 
     // 4. Veículo
@@ -1293,7 +1295,14 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                   type="text" 
                   list="agencias-list"
                   value={buscaAgencia} 
-                  onChange={(e) => { setBuscaAgencia(e.target.value); setAutoAgenciaId(null); }} 
+                  onChange={(e) => { 
+                    const val = e.target.value;
+                    setBuscaAgencia(val); 
+                    setAutoAgenciaId(null);
+                    if (val.trim()) {
+                      setEnviarParaCobrancaAgencia(true);
+                    }
+                  }} 
                   placeholder="Se houver, busque a agência..."
                   className="block w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 bg-white shadow-sm" 
                 />

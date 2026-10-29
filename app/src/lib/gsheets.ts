@@ -121,12 +121,44 @@ export async function appendRow(rowValues: string[]): Promise<string> {
   // Garante que o número da cobrança seja preenchido com o número da linha correspondente
   rowValues[0] = cobrancaNo;
 
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `A${rowNumber}:L${rowNumber}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [rowValues] },
-  });
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `A${rowNumber}:L${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowValues] },
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('exceeds grid limits') || err?.status === 400) {
+      // Expande automaticamente a grade da planilha adicionando 50 novas linhas
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const sheetId = meta.data.sheets?.[0]?.properties?.sheetId ?? 0;
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [
+            {
+              appendDimension: {
+                sheetId,
+                dimension: 'ROWS',
+                length: 50,
+              },
+            },
+          ],
+        },
+      });
+
+      // Repete o update na linha desejada
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `A${rowNumber}:L${rowNumber}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [rowValues] },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   return cobrancaNo;
 }
