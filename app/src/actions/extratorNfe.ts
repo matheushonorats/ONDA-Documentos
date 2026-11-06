@@ -95,6 +95,7 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .trim();
+    const compactNorm = (s: string) => norm(s).replace(/\s+/g, '');
 
     const tomadorCnpjDigits = cleanDigits(parsed.tomadorCnpj);
 
@@ -135,11 +136,15 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
         return true;
       });
 
-      // Busca exata ou com filtro de cidade
+      // Busca exata ou com filtro de cidade (suporta nomes com ou sem espaços de PDFs)
       matchedCliente = clientesCandidatos.find(c => {
         const rNorm = norm(c.razaoSocial);
         const fNorm = c.nomeFantasia ? norm(c.nomeFantasia) : '';
-        const nameMatch = rNorm === tNorm || fNorm === tNorm;
+        const nameMatch =
+          rNorm === tNorm ||
+          fNorm === tNorm ||
+          compactNorm(c.razaoSocial) === compactNorm(parsed.tomadorNome!) ||
+          (c.nomeFantasia && compactNorm(c.nomeFantasia) === compactNorm(parsed.tomadorNome!));
         if (nameMatch) {
           if (tomadorCidadeNorm && c.cidade) {
             return norm(c.cidade).includes(tomadorCidadeNorm) || tomadorCidadeNorm.includes(norm(c.cidade));
@@ -154,7 +159,12 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
         matchedCliente = clientesCandidatos.find(c => {
           const rNorm = norm(c.razaoSocial);
           const fNorm = c.nomeFantasia ? norm(c.nomeFantasia) : '';
-          const contains = rNorm.includes(tNorm) || tNorm.includes(rNorm) || (fNorm && (fNorm.includes(tNorm) || tNorm.includes(fNorm)));
+          const contains =
+            rNorm.includes(tNorm) ||
+            tNorm.includes(rNorm) ||
+            (fNorm && (fNorm.includes(tNorm) || tNorm.includes(fNorm))) ||
+            compactNorm(c.razaoSocial).includes(compactNorm(parsed.tomadorNome!)) ||
+            compactNorm(parsed.tomadorNome!).includes(compactNorm(c.razaoSocial));
           if (contains) {
             if (tomadorCidadeNorm && c.cidade) {
               return norm(c.cidade).includes(tomadorCidadeNorm) || tomadorCidadeNorm.includes(norm(c.cidade));
@@ -193,11 +203,10 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
       : null;
 
     if (!matchedAgencia && parsed.agenciaNome) {
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const aNorm = norm(parsed.agenciaNome);
+      const aNorm = compactNorm(parsed.agenciaNome);
       matchedAgencia =
         allAgencias.find(a => {
-          const nNorm = norm(a.nome);
+          const nNorm = compactNorm(a.nome);
           return nNorm === aNorm || nNorm.includes(aNorm) || aNorm.includes(nNorm);
         }) || null;
     }
@@ -217,14 +226,14 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
       select: { id: true, nome: true },
     });
     const textUpper = text.toUpperCase();
-    let matchedVeiculo = allVeiculos.find(v => textUpper.includes(v.nome.toUpperCase())) || null;
+    const textCompact = compactNorm(textUpper);
+    let matchedVeiculo = allVeiculos.find(v => textUpper.includes(v.nome.toUpperCase()) || textCompact.includes(compactNorm(v.nome))) || null;
 
     if (!matchedVeiculo && parsed.veiculoNome) {
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const vNorm = norm(parsed.veiculoNome);
+      const vNorm = compactNorm(parsed.veiculoNome);
       matchedVeiculo =
         allVeiculos.find(v => {
-          const dbNorm = norm(v.nome);
+          const dbNorm = compactNorm(v.nome);
           return dbNorm === vNorm || dbNorm.includes(vNorm) || vNorm.includes(dbNorm);
         }) || null;
     }
@@ -238,6 +247,7 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
     // Contagem de campos preenchidos
     let camposContados = 0;
     if (parsed.numeroNotaFiscal) camposContados++;
+    if (parsed.chaveAcesso) camposContados++;
     if (parsed.dataEmissao) camposContados++;
     if (parsed.vencimento) camposContados++;
     if (parsed.numeroPi) camposContados++;
@@ -253,6 +263,7 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
       success: true,
       dados: {
         numeroNotaFiscal: parsed.numeroNotaFiscal,
+        chaveAcesso: parsed.chaveAcesso,
         dataEmissao: parsed.dataEmissao,
         vencimento: parsed.vencimento,
         numeroPi: parsed.numeroPi,

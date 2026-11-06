@@ -190,6 +190,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
       totalCampos: number;
       origem: 'PDF' | 'URL';
       numeroNf?: string;
+      chaveAcesso?: string;
       cliente?: { nome?: string; vinculadoId: boolean; novo: boolean };
       agencia?: { nome?: string; vinculadoId: boolean };
       veiculo?: { nome?: string; vinculadoId: boolean };
@@ -419,6 +420,7 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
         totalCampos: dados.totalCamposIdentificados,
         origem: dados.origem,
         numeroNf: dados.numeroNotaFiscal,
+        chaveAcesso: dados.chaveAcesso,
         cliente: dados.clienteMatched
           ? { nome: dados.clienteNome, vinculadoId: true, novo: false }
           : { nome: dados.tomadorNome, vinculadoId: false, novo: true },
@@ -958,6 +960,14 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
                       {nfExtracaoFeedback.detalhes.numeroNf && (
                         <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-bold text-emerald-800 shadow-2xs">
                           NF: #{nfExtracaoFeedback.detalhes.numeroNf}
+                        </span>
+                      )}
+                      {nfExtracaoFeedback.detalhes.chaveAcesso && (
+                        <span
+                          className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-emerald-200 font-mono text-[11px] text-emerald-800 shadow-2xs"
+                          title={`Chave de Acesso Nacional: ${nfExtracaoFeedback.detalhes.chaveAcesso}`}
+                        >
+                          Chave NFS-e: {nfExtracaoFeedback.detalhes.chaveAcesso.slice(0, 7)}...{nfExtracaoFeedback.detalhes.chaveAcesso.slice(-7)}
                         </span>
                       )}
                       {nfExtracaoFeedback.detalhes.cliente?.nome && (
