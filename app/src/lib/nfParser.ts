@@ -371,5 +371,114 @@ export function parseNfseTextContent(text: string) {
     }
   }
 
+  if (result.descricao) {
+    result.descricao = formatarDescricaoServico(result.descricao);
+  }
+
   return result;
+}
+
+/**
+ * Formata e organiza a descrição dos serviços, corrigindo concatenações indesejadas
+ * de palavras causadas por extratores de PDF (ex: PDFium no DANFSe Nacional v2.0),
+ * separando rótulos, datas, valores e quebras de linha de forma limpa e legível.
+ */
+export function formatarDescricaoServico(rawDesc: string): string {
+  if (!rawDesc || typeof rawDesc !== 'string') return '';
+
+  let s = rawDesc.replace(/\r\n/g, '\n').trim();
+
+  // 1. Separar palavras-chave coladas conhecidas no início ou meio de frases
+  const replacePairs: [RegExp, string][] = [
+    [/RADIOONDA\b/gi, 'RÁDIO ONDA'],
+    [/R[ÁA]DIOONDA\b/gi, 'RÁDIO ONDA'],
+    [/SERVI[ÇC]OSEXECUTADOS/gi, 'SERVIÇOS EXECUTADOS'],
+    [/OBJETODOCONTRATO/gi, 'OBJETO DO CONTRATO'],
+    [/DESCRITIVODOSERVI[ÇC]O/gi, 'DESCRITIVO DO SERVIÇO'],
+    [/PER[ÍI]ODODEVEICULA[ÇC][ÃA]O/gi, 'PERÍODO DE VEICULAÇÃO'],
+    [/VALORBRUTO/gi, 'VALOR BRUTO'],
+    [/VALORNEGOCIADO/gi, 'VALOR NEGOCIADO'],
+    [/NEGOCIADO\(/gi, 'NEGOCIADO ('],
+    [/VALORDE\b/gi, 'VALOR DE '],
+    [/VALORDESERVI[ÇC]O/gi, 'VALOR DE SERVIÇO'],
+    [/VALORDOREFER[ÊE]NCIA/gi, 'VALOR DE REFERÊNCIA'],
+    [/VALORDASDESPESAS/gi, 'VALOR DAS DESPESAS'],
+    [/ORDEME CONTADE/gi, 'ORDEM E CONTA DE'],
+    [/ORDEMECONTADE/gi, 'ORDEM E CONTA DE'],
+    [/DADOSBANC[ÁA]RIOS/gi, 'DADOS BANCÁRIOS'],
+    [/DADOSBANCARIOS/gi, 'DADOS BANCÁRIOS'],
+    [/TIPODECONTA/gi, 'TIPO DE CONTA'],
+    [/CONTACORRENTE/gi, 'CONTA CORRENTE'],
+    [/NOMECOMPLETO/gi, 'NOME COMPLETO'],
+    [/N[º°o]\.?PI/gi, 'Nº PI'],
+    [/PEDIDODEINSER[ÇC][ÃA]O/gi, 'PEDIDO DE INSERÇÃO'],
+  ];
+
+  for (const [pattern, repl] of replacePairs) {
+    s = s.replace(pattern, repl);
+  }
+
+  // 2. Quebrar linha antes de seções e campos chave se estiverem grudados na mesma linha ou em texto anterior
+  const sectionKeywords = [
+    'OBJETO DO CONTRATO',
+    'CAMPANHA',
+    'N[º°o]\\.?\\s*PI',
+    'PEDIDO DE INSERÇÃO',
+    'PER[ÍI]ODO DE VEICULA[ÇC][ÃA]O',
+    'VENCIMENTO',
+    'DESCRITIVO DO SERVI[ÇC]O',
+    'VALOR BRUTO',
+    'VALOR NEGOCIADO(?:\\s*\\(L[ÍI]QUIDO\\))?',
+    'VALOR DE REFER[ÊE]NCIA',
+    'POR ORDEM E CONTA DE',
+    'ORDEM E CONTA DE',
+    'DADOS BANC[ÁA]RIOS',
+    'BANCO',
+    'AG[ÊE]NCIA',
+    'CONTA',
+    'TIPO DE CONTA',
+    'NOME COMPLETO',
+    'PIX'
+  ];
+
+  for (const kw of sectionKeywords) {
+    // Caso 1: Grudado em letra/número anterior sem espaço (ex: "PUBLICIDADECAMPANHA:")
+    const gluedRegex = new RegExp(`([a-zA-Z0-9À-ÿ])(${kw})\\s*:`, 'gi');
+    s = s.replace(gluedRegex, '$1\n$2:');
+
+    // Caso 2: Em mesma linha com espaço anterior (ex: " ... 20SEC VALOR BRUTO:")
+    const inlineRegex = new RegExp(`(?<!\\n|^)\\s+(${kw})\\s*:`, 'gi');
+    s = s.replace(inlineRegex, '\n$1:');
+  }
+
+  // Quebrar linha antes de termos de valor em sequência
+  s = s.replace(/([0-9,]+)\s*(VALOR\s+NEGOCIADO)/gi, '$1\n$2');
+  s = s.replace(/([0-9,]+)\s*(VALOR\s+DE\b)/gi, '$1\n$2');
+
+  // Quebrar linha antes de "SERVIÇOS EXECUTADOS" ou "IRRADIAÇÕES COMERCIAIS"
+  s = s.replace(/(?<!\n|^)\s*(SERVI[ÇC]OS\s+EXECUTADOS)/gi, '\n$1');
+  s = s.replace(/(?<!\n|^)\s*(IRRADIA[ÇC][ÕO]ES\s+COMERCIAIS)/gi, '\n$1');
+
+  // 3. Garantir espaço após dois pontos ":" se estiver colado no valor
+  s = s.replace(/:([^\s\/\d])/g, ': $1');
+  s = s.replace(/:(\d)/g, ': $1');
+
+  // 4. Separar datas coladas com 'A' ou 'ATÉ'
+  s = s.replace(/(\d{2}\/\d{2}\/\d{4})\s*A\s*(\d{2}\/\d{2}\/\d{4})/gi, '$1 A $2');
+  s = s.replace(/(\d{2}\/\d{2}\/\d{4})\s*AT[ÉE]\s*(\d{2}\/\d{2}\/\d{4})/gi, '$1 ATÉ $2');
+
+  // 5. Garantir espaço em "R$" colado em números: "R$840,00" -> "R$ 840,00"
+  s = s.replace(/R\$\s*(\d)/gi, 'R$ $1');
+
+  // 6. Separar horários ou texto comum de rádio colado
+  s = s.replace(/ROTATIVO(\d)/gi, 'ROTATIVO $1');
+  s = s.replace(/(\d{1,2})\s*-\s*(\d{1,2})H\b/gi, '$1-$2H');
+
+  // 7. Normalizar quebras de linha múltiplas e espaços excedentes
+  const lines = s
+    .split('\n')
+    .map(line => line.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+
+  return lines.join('\n');
 }

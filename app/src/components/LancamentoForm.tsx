@@ -31,7 +31,7 @@ import { createLancamento, verificarLancamentoSimilar, type LancamentoSimilarInf
 import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
 import { adicionarCobranca } from '@/actions/cobrancas';
 import { criarLote, adicionarAoLote } from '@/actions/lotes';
-import type { ExtracaoNfeResult } from '@/lib/nfParser';
+import { formatarDescricaoServico, type ExtracaoNfeResult } from '@/lib/nfParser';
 
 type Props = {
   initialTipo: 'RECEITA' | 'DESPESA';
@@ -623,7 +623,8 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
   const handlePasteDescricao = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      setDescricao(prev => prev + (prev ? ' ' : '') + text);
+      const formatted = formatarDescricaoServico(text);
+      setDescricao(prev => prev + (prev ? '\n' : '') + formatted);
     } catch (err) {
       console.error('Falha ao colar', err);
     }

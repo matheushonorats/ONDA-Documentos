@@ -138,4 +138,20 @@ assert(resLegacy.mesAnoReferencia === '10/2026', 'Deveria extrair mês 10/2026')
 assert(resLegacy.tomadorCnpj === '00.394.460/0058-87', 'Deveria extrair CNPJ tomador');
 assert(resLegacy.valor === 907.2, 'Deveria extrair valor 907.2');
 
+// Teste 3: Formatação e separação de espaços e quebras de linha na descrição (caso do usuário)
+import { formatarDescricaoServico } from '../src/lib/nfParser';
+
+const userGluedText = `RADIOONDA FM SERVIÇOS EXECUTADOS OUTUBRO/2026 OBJETO DO CONTRATO:PUBLICIDADECAMPANHA:EAD2026N°PI:26862PERÍODODEVEICULAÇÃO: 26/10/2026A 31/10/2026DESCRITIVODOSERVIÇO:ROTATIVO06- 19H 20SEC VALORBRUTO:R$840,00VALORNEGOCIADO(LÍQUIDO):R$672,00VALORDE REFERENCIA`;
+const formattedDesc = formatarDescricaoServico(userGluedText);
+
+console.log('3. Formatação de Descrição com Texto Colado:\n', formattedDesc);
+
+assert(formattedDesc.includes('RÁDIO ONDA FM'), 'Deveria separar RÁDIO ONDA FM');
+assert(formattedDesc.includes('OBJETO DO CONTRATO: PUBLICIDADE'), 'Deveria conter OBJETO DO CONTRATO: PUBLICIDADE');
+assert(formattedDesc.includes('CAMPANHA: EAD2026'), 'Deveria conter CAMPANHA: EAD2026');
+assert(formattedDesc.includes('Nº PI: 26862'), 'Deveria conter Nº PI: 26862');
+assert(formattedDesc.includes('PERÍODO DE VEICULAÇÃO: 26/10/2026 A 31/10/2026'), 'Deveria conter datas com A espaçado');
+assert(formattedDesc.includes('VALOR BRUTO: R$ 840,00'), 'Deveria conter VALOR BRUTO: R$ 840,00');
+assert(formattedDesc.includes('VALOR NEGOCIADO (LÍQUIDO): R$ 672,00'), 'Deveria conter VALOR NEGOCIADO (LÍQUIDO): R$ 672,00');
+
 console.log('\n✔ TODOS OS TESTES PASSARAM COM 100% DE SUCESSO!');

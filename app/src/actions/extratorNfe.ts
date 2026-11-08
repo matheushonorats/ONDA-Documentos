@@ -61,10 +61,48 @@ export async function extrairDadosNotaFiscal(input: FormData | string): Promise<
       return { success: false, error: 'Arquivo PDF não fornecido ou vazio.' };
     }
 
-    // Leitura robusta do PDF compatível com servidores e ambientes serverless (Vercel)
+    // Leitura robusta do PDF com preservação de espaçamento horizontal entre blocos de texto (PDFium / DANFSe v2.0)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdf = require('pdf-parse');
-    const pdfData = await pdf(buffer);
+    const pdfData = await pdf(buffer, {
+      pagerender: async (pageData: any) => {
+        const textContent = await pageData.getTextContent({
+          normalizeWhitespace: true,
+          disableCombineTextItems: false,
+        });
+
+        let lastY: number | null = null;
+        let lastX: number | null = null;
+        let lastWidth: number = 0;
+        let pageText = '';
+
+        for (const item of textContent.items) {
+          const x = item.transform[4];
+          const y = item.transform[5];
+          const str = item.str;
+
+          if (lastY === null) {
+            pageText += str;
+          } else if (Math.abs(y - lastY) > 2) {
+            pageText += '\n' + str;
+          } else {
+            const prevEndX = (lastX ?? 0) + lastWidth;
+            const deltaX = x - prevEndX;
+            if (deltaX > 1.2 && !pageText.endsWith(' ') && !str.startsWith(' ')) {
+              pageText += ' ' + str;
+            } else {
+              pageText += str;
+            }
+          }
+
+          lastY = y;
+          lastX = x;
+          lastWidth = item.width || 0;
+        }
+
+        return pageText;
+      },
+    });
     const text = pdfData?.text || '';
 
     if (!text.trim()) {
