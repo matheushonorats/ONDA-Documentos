@@ -135,6 +135,7 @@ model Documento {
   colunaOrigem    String?
   planilhaOrigem  String?
   tamanhoBytes    Int     @default(0)
+  hashSha256      String?
 
   dataDocumento      DateTime?
   dataInclusao       DateTime  @default(now())
@@ -147,6 +148,7 @@ model Documento {
 
   @@index([lancamentoId, dataInclusao])
   @@index([nomeOriginal])
+  @@index([hashSha256])
 }
 
 model HistoricoLancamento {

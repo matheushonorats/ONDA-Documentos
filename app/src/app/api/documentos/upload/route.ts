@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/gdrive';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma';
+import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -107,13 +108,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Processamento e upload de cada arquivo para o Google Drive
+    // Processamento e upload de cada arquivo para o Google Drive com deduplicação inteligente
     const uploadedDocs: Array<{
       driveId: string;
       webViewLink: string | null;
       typeId: string;
       fileSize: number;
       name: string;
+      hashSha256: string;
     }> = [];
 
     for (let index = 0; index < metadata.length; index++) {
@@ -158,26 +160,54 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Upload Google Drive
+      // Deduplicação Inteligente por Hash SHA-256
       const fileBuffer = Buffer.from(await file.arrayBuffer());
-      const driveRes = await uploadToGoogleDrive(
-        fileBuffer,
-        file.name,
-        file.type || 'application/octet-stream',
-        folderId
-      );
+      const hashSha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
-      if (!driveRes.id) {
-        throw new Error(`O Google Drive não retornou a identificação de "${file.name}".`);
+      const existingDoc = await db.documento.findFirst({
+        where: {
+          hashSha256,
+          caminhoOriginal: { not: null },
+          urlPublica: { not: null },
+          status: 'ATIVO',
+        },
+        select: {
+          caminhoOriginal: true,
+          urlPublica: true,
+        },
+      });
+
+      let driveId: string;
+      let webViewLink: string | null;
+
+      if (existingDoc?.caminhoOriginal) {
+        driveId = existingDoc.caminhoOriginal;
+        webViewLink = existingDoc.urlPublica;
+      } else {
+        // Upload Google Drive
+        const driveRes = await uploadToGoogleDrive(
+          fileBuffer,
+          file.name,
+          file.type || 'application/octet-stream',
+          folderId
+        );
+
+        if (!driveRes.id) {
+          throw new Error(`O Google Drive não retornou a identificação de "${file.name}".`);
+        }
+
+        driveId = driveRes.id;
+        webViewLink = driveRes.webViewLink ?? null;
+        uploadedDriveFiles.push(driveId);
       }
 
-      uploadedDriveFiles.push(driveRes.id);
       uploadedDocs.push({
-        driveId: driveRes.id,
-        webViewLink: driveRes.webViewLink ?? null,
+        driveId,
+        webViewLink,
         typeId: resolvedTypeId,
         fileSize: file.size,
         name: meta.nomeOriginal || file.name,
+        hashSha256,
       });
     }
 
@@ -200,6 +230,7 @@ export async function POST(req: NextRequest) {
           caminhoOriginal: item.driveId,
           urlPublica: item.webViewLink,
           tamanhoBytes: item.fileSize,
+          hashSha256: item.hashSha256,
           usuarioResponsavel: targetIds.length > 1 ? 'Anexo Contrato/PI' : 'Inclusão pelo sistema',
         });
       }

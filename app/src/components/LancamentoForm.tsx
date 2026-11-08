@@ -32,6 +32,7 @@ import { extrairDadosNotaFiscal } from '@/actions/extratorNfe';
 import { adicionarCobranca } from '@/actions/cobrancas';
 import { criarLote, adicionarAoLote } from '@/actions/lotes';
 import { formatarDescricaoServico, type ExtracaoNfeResult } from '@/lib/nfParser';
+import { compressImageFile } from '@/lib/imageCompressor';
 
 type Props = {
   initialTipo: 'RECEITA' | 'DESPESA';
@@ -577,7 +578,13 @@ export function LancamentoForm({ initialTipo, clientes, colaboradores, agencias,
     setArquivos(arquivos.filter((_, i) => i !== index));
   };
 
-  const handleFileChange = (index: number, file: File | null) => {
+  const handleFileChange = async (index: number, rawFile: File | null) => {
+    // Otimização automática de fotos/imagens pesadas (5MB -> 200KB)
+    let file = rawFile;
+    if (file && file.type?.startsWith('image/')) {
+      file = await compressImageFile(file);
+    }
+
     const newArr = [...arquivos];
     newArr[index].file = file;
     

@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { adicionarLinkDocumento } from '@/actions/documentos';
 import { useRouter } from 'next/navigation';
+import { compressFilesList } from '@/lib/imageCompressor';
 
 export interface ParcelaContratoResumo {
   id: string;
@@ -76,9 +77,10 @@ export function NovoDocumentoClient({
       ? lancamento.cliente?.nomeFantasia || lancamento.cliente?.razaoSocial
       : lancamento.colaborador?.nome;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const novasFiles = Array.from(e.target.files);
+      const rawFiles = Array.from(e.target.files);
+      const novasFiles = await compressFilesList(rawFiles);
 
       // Validação prévia de tamanho individual
       const arquivosExcedentes = novasFiles.filter(f => f.size > 25 * 1024 * 1024);

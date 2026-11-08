@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { deleteFromGoogleDrive, uploadToGoogleDrive } from '@/lib/gdrive';
 import { Prisma } from '@/generated/prisma';
 import { revalidatePath } from 'next/cache';
+import crypto from 'crypto';
 
 type UploadMeta = { tipoId: string; novoTipoDocumento?: string; nomeOriginal: string };
 
@@ -163,7 +164,7 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
     throw new Error('O Google Drive ainda não está configurado para receber arquivos.');
   }
 
-  const uploaded: Array<{ driveId: string; webViewLink: string | null; typeId: string; typeName: string; file: File; name: string }> = [];
+  const uploaded: Array<{ driveId: string; webViewLink: string | null; typeId: string; typeName: string; file: File; name: string; hashSha256: string }> = [];
   try {
     for (let index = 0; index < metadata.length; index += 1) {
       const meta = metadata[index];
@@ -171,9 +172,46 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
       if (!(file instanceof File) || file.size === 0) throw new Error('Um dos arquivos selecionados está vazio ou indisponível.');
       if (file.size > 50 * 1024 * 1024) throw new Error(`O arquivo ${file.name} ultrapassa o limite de 50 MB.`);
       const type = await resolveType(meta);
-      const response = await uploadToGoogleDrive(Buffer.from(await file.arrayBuffer()), file.name, file.type || 'application/octet-stream', folderId);
-      if (!response.id) throw new Error(`O Drive não retornou a identificação de ${file.name}.`);
-      uploaded.push({ driveId: response.id, webViewLink: response.webViewLink ?? null, typeId: type.id, typeName: type.nome, file, name: meta.nomeOriginal || file.name });
+
+      const fileBuffer = Buffer.from(await file.arrayBuffer());
+      const hashSha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+      // Deduplicação Inteligente: se já existir um arquivo idêntico no Drive, reutiliza o link sem gastar espaço
+      const existingDoc = await db.documento.findFirst({
+        where: {
+          hashSha256,
+          caminhoOriginal: { not: null },
+          urlPublica: { not: null },
+          status: 'ATIVO',
+        },
+        select: {
+          caminhoOriginal: true,
+          urlPublica: true,
+        },
+      });
+
+      let driveId: string;
+      let webViewLink: string | null;
+
+      if (existingDoc?.caminhoOriginal) {
+        driveId = existingDoc.caminhoOriginal;
+        webViewLink = existingDoc.urlPublica;
+      } else {
+        const response = await uploadToGoogleDrive(fileBuffer, file.name, file.type || 'application/octet-stream', folderId);
+        if (!response.id) throw new Error(`O Drive não retornou a identificação de ${file.name}.`);
+        driveId = response.id;
+        webViewLink = response.webViewLink ?? null;
+      }
+
+      uploaded.push({
+        driveId,
+        webViewLink,
+        typeId: type.id,
+        typeName: type.nome,
+        file,
+        name: meta.nomeOriginal || file.name,
+        hashSha256,
+      });
     }
 
     const documentsToCreate: Prisma.DocumentoCreateManyInput[] = [];
@@ -193,6 +231,7 @@ async function saveDocuments(lancamento: { id: string; tipoLancamento: string },
           caminhoOriginal: item.driveId,
           urlPublica: item.webViewLink,
           tamanhoBytes: item.file.size,
+          hashSha256: item.hashSha256,
           usuarioResponsavel: 'Inclusão pelo sistema',
         });
       }
