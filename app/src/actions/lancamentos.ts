@@ -838,27 +838,38 @@ export async function verificarLancamentoSimilar(params: {
       });
 
       if (matchNf) {
-        const owner = matchNf.tipoLancamento === 'RECEITA'
-          ? matchNf.cliente?.nomeFantasia || matchNf.cliente?.razaoSocial || 'Cliente'
-          : matchNf.colaborador?.nome || 'Fornecedor';
+        // Se o cliente/colaborador for diferente do lançamento encontrado,
+        // e o registro encontrado for do acervo legado municipal (anterior à transição da NFS-e Nacional),
+        // trata-se de coincidência da numeração que reiniciou do 1, NÃO de duplicata real.
+        const isDifferentOwner =
+          Boolean(clienteId && matchNf.clienteId && matchNf.clienteId !== clienteId) ||
+          Boolean(colaboradorId && matchNf.colaboradorId && matchNf.colaboradorId !== colaboradorId);
 
-        return {
-          found: true,
-          motivo: `Já existe um lançamento cadastrado com a mesma Nota Fiscal (NF nº ${nfLimpa}) para "${owner}".`,
-          similar: {
-            id: matchNf.id,
-            appSheetId: matchNf.appSheetId,
-            tipoLancamento: matchNf.tipoLancamento,
-            ownerNome: owner,
-            numeroNotaFiscal: matchNf.numeroNotaFiscal,
-            numeroPi: matchNf.numeroPi,
-            veiculoNome: matchNf.veiculo?.nome || null,
-            valor: matchNf.valor,
-            vencimento: matchNf.vencimento ? matchNf.vencimento.toISOString() : null,
-            mesAnoReferencia: matchNf.mesAnoReferencia,
-            createdAt: matchNf.createdAt.toISOString(),
-          },
-        };
+        const isLegacyEra = matchNf.createdAt < new Date('2026-10-25T00:00:00Z');
+
+        if (!(isDifferentOwner && isLegacyEra)) {
+          const owner = matchNf.tipoLancamento === 'RECEITA'
+            ? matchNf.cliente?.nomeFantasia || matchNf.cliente?.razaoSocial || 'Cliente'
+            : matchNf.colaborador?.nome || 'Fornecedor';
+
+          return {
+            found: true,
+            motivo: `Já existe um lançamento cadastrado com a mesma Nota Fiscal (NF nº ${nfLimpa}) para "${owner}".`,
+            similar: {
+              id: matchNf.id,
+              appSheetId: matchNf.appSheetId,
+              tipoLancamento: matchNf.tipoLancamento,
+              ownerNome: owner,
+              numeroNotaFiscal: matchNf.numeroNotaFiscal,
+              numeroPi: matchNf.numeroPi,
+              veiculoNome: matchNf.veiculo?.nome || null,
+              valor: matchNf.valor,
+              vencimento: matchNf.vencimento ? matchNf.vencimento.toISOString() : null,
+              mesAnoReferencia: matchNf.mesAnoReferencia,
+              createdAt: matchNf.createdAt.toISOString(),
+            },
+          };
+        }
       }
     }
 
